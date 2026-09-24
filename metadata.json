@@ -1,0 +1,6 @@
+{
+  "name": "MINISO Smart Retail OS",
+  "description": "Store operations, real-time POS billing terminal, SKU master, inventory monitor, and predictive demand analytics for Phoenix Mall Flagship.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
