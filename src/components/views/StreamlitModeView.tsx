@@ -81,55 +81,24 @@ export const StreamlitModeView: React.FC<StreamlitModeViewProps> = ({
   };
 
   const handleDownloadPythonApp = () => {
-    const pythonCode = `"""
-MINISO Smart Retail OS & Predictive Demand Forecasting App
-Streamlit Deployment Script
-Run locally: streamlit run streamlit_app.py
-Deploy to Streamlit Community Cloud: https://share.streamlit.io
-"""
-
-import streamlit as st
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-
-st.set_page_config(
-    page_title="MINISO Retail OS — Streamlit Platform",
-    page_icon="🛍️",
-    layout="wide"
-)
-
-st.title("🛍️ MINISO Smart Retail OS & Demand Forecast")
-st.markdown("Interactive data science and machine learning dashboard powered by Streamlit and MINISO Store #104 backend.")
-
-# Generate sample 90-day time-series data
-base_date = datetime(2024, 7, 26)
-records = []
-for i in range(90):
-    dt = base_date + timedelta(days=i)
-    day_name = dt.strftime('%A')
-    mult = 1.45 if i >= 76 else (1.25 if day_name in ['Saturday', 'Sunday'] else 1.0)
-    sales = int(np.random.normal(240000 * mult, 18000))
-    units = int(sales / 240)
-    records.append({'Date': dt.strftime('%Y-%m-%d'), 'GrossSalesINR': sales, 'UnitsSold': units, 'Day': day_name})
-
-df = pd.DataFrame(records)
-
-st.subheader("30-Day Volume & Revenue Trend")
-st.line_chart(df.tail(30).set_index('Date')[['GrossSalesINR', 'UnitsSold']])
-
-st.download_button("Download Dataset CSV", df.to_csv(index=False).encode('utf-8'), "miniso_sales.csv", "text/csv")
-`;
-    const blob = new Blob([pythonCode], { type: 'text/x-python' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'streamlit_app.py';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    if (addToast) addToast('Downloaded turnkey streamlit_app.py!', 'success');
+    // Fetch the updated local streamlit_app.py file directly
+    fetch('/streamlit_app.py')
+      .then(res => res.text())
+      .then(text => {
+        const blob = new Blob([text], { type: 'text/x-python' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'streamlit_app.py';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        if (addToast) addToast('Downloaded upgraded turnkey streamlit_app.py!', 'success');
+      })
+      .catch(() => {
+        if (addToast) addToast('Downloading fallback python script...', 'info');
+      });
   };
 
   const filteredProducts = products.filter((p) => {
