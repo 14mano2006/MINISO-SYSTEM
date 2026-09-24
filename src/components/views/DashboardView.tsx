@@ -13,6 +13,20 @@ import {
   Cell
 } from 'recharts';
 
+interface DailyVolumeChartItem {
+  slot: string;
+  today?: number;
+  yesterday?: number;
+  actual?: number;
+  previousWeek?: number;
+  previousPeriod?: number;
+  target?: number;
+  todayRevenue?: number;
+  yesterdayRevenue?: number;
+  revenue?: number;
+  prevRevenue?: number;
+}
+
 interface DashboardViewProps {
   products: Product[];
   onOpenPos: () => void;
@@ -38,36 +52,64 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Daily Sales Volume vs Store Target State
   const [dailyTarget, setDailyTarget] = useState<number>(420);
-  const [chartViewMode, setChartViewMode] = useState<'hourly' | '7days'>('hourly');
+  const [chartViewMode, setChartViewMode] = useState<'today-vs-yesterday' | '7days' | '14days'>('today-vs-yesterday');
 
-  // Today's Intraday Hourly Volume vs Target
-  const hourlySalesVolumeData = [
-    { slot: '10:00 AM', actual: 28, target: Math.round(dailyTarget * 0.05), revenue: 7000 },
-    { slot: '12:00 PM', actual: 52, target: Math.round(dailyTarget * 0.10), revenue: 13000 },
-    { slot: '02:00 PM', actual: 64, target: Math.round(dailyTarget * 0.12), revenue: 16000 },
-    { slot: '04:00 PM', actual: 78, target: Math.round(dailyTarget * 0.15), revenue: 19500 },
-    { slot: '06:00 PM', actual: 108, target: Math.round(dailyTarget * 0.22), revenue: 27000 },
-    { slot: '08:00 PM', actual: 125, target: Math.round(dailyTarget * 0.24), revenue: 31250 },
-    { slot: '10:00 PM', actual: 70, target: Math.round(dailyTarget * 0.12), revenue: 17500 },
+  // Intraday Hourly Volume: Today vs Yesterday vs Target
+  const hourlyComparisonData = [
+    { slot: '10:00 AM', today: 28, yesterday: 24, target: Math.round(dailyTarget * 0.05), todayRevenue: 7000, yesterdayRevenue: 6000 },
+    { slot: '12:00 PM', today: 52, yesterday: 46, target: Math.round(dailyTarget * 0.10), todayRevenue: 13000, yesterdayRevenue: 11500 },
+    { slot: '02:00 PM', today: 64, yesterday: 58, target: Math.round(dailyTarget * 0.12), todayRevenue: 16000, yesterdayRevenue: 14500 },
+    { slot: '04:00 PM', today: 78, yesterday: 72, target: Math.round(dailyTarget * 0.15), todayRevenue: 19500, yesterdayRevenue: 18000 },
+    { slot: '06:00 PM', today: 108, yesterday: 95, target: Math.round(dailyTarget * 0.22), todayRevenue: 27000, yesterdayRevenue: 23750 },
+    { slot: '08:00 PM', today: 125, yesterday: 118, target: Math.round(dailyTarget * 0.24), todayRevenue: 31250, yesterdayRevenue: 29500 },
+    { slot: '10:00 PM', today: 70, yesterday: 65, target: Math.round(dailyTarget * 0.12), todayRevenue: 17500, yesterdayRevenue: 16250 },
   ];
 
-  // 7-Day Performance vs Daily Store Target
-  const weeklySalesVolumeData = [
-    { slot: 'Mon Oct 18', actual: 380, target: dailyTarget, revenue: 95000 },
-    { slot: 'Tue Oct 19', actual: 410, target: dailyTarget, revenue: 102500 },
-    { slot: 'Wed Oct 20', actual: 395, target: dailyTarget, revenue: 98750 },
-    { slot: 'Thu Oct 21', actual: 435, target: dailyTarget, revenue: 108750 },
-    { slot: 'Fri Oct 22', actual: 485, target: dailyTarget, revenue: 121250 },
-    { slot: 'Sat Oct 23', actual: 560, target: Math.round(dailyTarget * 1.15), revenue: 140000 },
-    { slot: 'Sun Oct 24 (Today)', actual: 525, target: dailyTarget, revenue: 131250 },
+  // 7-Day Performance: Current Week vs Prior Week Same Day
+  const weeklyComparisonData = [
+    { slot: 'Mon Oct 18', actual: 380, previousWeek: 340, target: dailyTarget, revenue: 95000, prevRevenue: 85000 },
+    { slot: 'Tue Oct 19', actual: 410, previousWeek: 365, target: dailyTarget, revenue: 102500, prevRevenue: 91250 },
+    { slot: 'Wed Oct 20', actual: 395, previousWeek: 350, target: dailyTarget, revenue: 98750, prevRevenue: 87500 },
+    { slot: 'Thu Oct 21', actual: 435, previousWeek: 380, target: dailyTarget, revenue: 108750, prevRevenue: 95000 },
+    { slot: 'Fri Oct 22', actual: 485, previousWeek: 420, target: dailyTarget, revenue: 121250, prevRevenue: 105000 },
+    { slot: 'Sat Oct 23', actual: 560, previousWeek: 490, target: Math.round(dailyTarget * 1.15), revenue: 140000, prevRevenue: 122500 },
+    { slot: 'Sun Oct 24 (Today)', actual: 525, previousWeek: 460, target: dailyTarget, revenue: 131250, prevRevenue: 115000 },
   ];
 
-  const currentChartData = chartViewMode === 'hourly' ? hourlySalesVolumeData : weeklySalesVolumeData;
-  const todayActualUnits = hourlySalesVolumeData.reduce((acc, d) => acc + d.actual, 0); // 525 units
-  const todayRevenue = hourlySalesVolumeData.reduce((acc, d) => acc + d.revenue, 0); // ₹1,31,250
+  // 14-Day Consecutive Daily Historical Volume vs Target & Baseline
+  const fourteenDayData = [
+    { slot: 'Oct 11', actual: 355, previousPeriod: 320, target: dailyTarget, revenue: 88750 },
+    { slot: 'Oct 12', actual: 368, previousPeriod: 335, target: dailyTarget, revenue: 92000 },
+    { slot: 'Oct 13', actual: 342, previousPeriod: 310, target: dailyTarget, revenue: 85500 },
+    { slot: 'Oct 14', actual: 385, previousPeriod: 345, target: dailyTarget, revenue: 96250 },
+    { slot: 'Oct 15', actual: 420, previousPeriod: 375, target: dailyTarget, revenue: 105000 },
+    { slot: 'Oct 16', actual: 495, previousPeriod: 440, target: Math.round(dailyTarget * 1.15), revenue: 123750 },
+    { slot: 'Oct 17', actual: 465, previousPeriod: 415, target: dailyTarget, revenue: 116250 },
+    { slot: 'Oct 18', actual: 380, previousPeriod: 340, target: dailyTarget, revenue: 95000 },
+    { slot: 'Oct 19', actual: 410, previousPeriod: 365, target: dailyTarget, revenue: 102500 },
+    { slot: 'Oct 20', actual: 395, previousPeriod: 350, target: dailyTarget, revenue: 98750 },
+    { slot: 'Oct 21', actual: 435, previousPeriod: 380, target: dailyTarget, revenue: 108750 },
+    { slot: 'Oct 22', actual: 485, previousPeriod: 420, target: dailyTarget, revenue: 121250 },
+    { slot: 'Oct 23', actual: 560, previousPeriod: 490, target: Math.round(dailyTarget * 1.15), revenue: 140000 },
+    { slot: 'Today', actual: 525, previousPeriod: 460, target: dailyTarget, revenue: 131250 },
+  ];
+
+  const currentChartData: DailyVolumeChartItem[] = 
+    chartViewMode === 'today-vs-yesterday' 
+      ? hourlyComparisonData 
+      : chartViewMode === '7days' 
+      ? weeklyComparisonData 
+      : fourteenDayData;
+
+  const todayActualUnits = hourlyComparisonData.reduce((acc, d) => acc + d.today, 0); // 525 units
+  const yesterdayActualUnits = hourlyComparisonData.reduce((acc, d) => acc + d.yesterday, 0); // 478 units
+  const todayRevenue = hourlyComparisonData.reduce((acc, d) => acc + d.todayRevenue, 0); // ₹1,31,250
+  const yesterdayRevenue = hourlyComparisonData.reduce((acc, d) => acc + d.yesterdayRevenue, 0); // ₹1,19,500
+  const dayOverDayGrowth = Number((((todayActualUnits - yesterdayActualUnits) / yesterdayActualUnits) * 100).toFixed(1)); // +9.8%
   const achievementPct = Math.round((todayActualUnits / dailyTarget) * 100);
   const varianceUnits = todayActualUnits - dailyTarget;
   const isAhead = varianceUnits >= 0;
+  const sevenDayPriorAvg = Math.round(weeklyComparisonData.reduce((acc, d) => acc + d.previousWeek, 0) / 7);
 
   const handleQuickReorder = (itemId: string) => {
     setReorderedItems((prev) => ({ ...prev, [itemId]: true }));
@@ -139,11 +181,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Top 4 Summary KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
         {/* KPI 1: Total Sales */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-[#efeeec] hover:shadow-md transition-all flex flex-col justify-between">
+        <div className="glass-card rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-1 transition-all duration-300 border border-[#efeeec]/90 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs uppercase tracking-wider text-[#5e5e65] font-semibold">Total Gross Sales</span>
-            <div className="w-8 h-8 rounded-lg bg-[#6ffbbe]/30 flex items-center justify-center text-[#002113]">
-              <span className="material-symbols-outlined text-[18px]">payments</span>
+            <div className="w-9 h-9 rounded-xl bg-[#6ffbbe]/30 flex items-center justify-center text-[#002113] group-hover:scale-110 transition-transform">
+              <span className="material-symbols-outlined text-[19px]">payments</span>
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-1">
@@ -162,11 +204,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* KPI 2: Total Orders */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-[#efeeec] hover:shadow-md transition-all flex flex-col justify-between">
+        <div className="glass-card rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-1 transition-all duration-300 border border-[#efeeec]/90 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs uppercase tracking-wider text-[#5e5e65] font-semibold">Total POS Receipts</span>
-            <div className="w-8 h-8 rounded-lg bg-[#e4e1ea] flex items-center justify-center text-[#1b1b21]">
-              <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+            <div className="w-9 h-9 rounded-xl bg-[#e4e1ea] flex items-center justify-center text-[#1b1b21] group-hover:scale-110 transition-transform">
+              <span className="material-symbols-outlined text-[19px]">receipt_long</span>
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-1">
@@ -180,11 +222,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* KPI 3: Active Products */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-[#efeeec] hover:shadow-md transition-all flex flex-col justify-between">
+        <div className="glass-card rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-1 transition-all duration-300 border border-[#efeeec]/90 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs uppercase tracking-wider text-[#5e5e65] font-semibold">Catalog SKUs</span>
-            <div className="w-8 h-8 rounded-lg bg-[#e9e8e6] flex items-center justify-center text-[#1a1c1b]">
-              <span className="material-symbols-outlined text-[18px]">inventory</span>
+            <div className="w-9 h-9 rounded-xl bg-[#e9e8e6] flex items-center justify-center text-[#1a1c1b] group-hover:scale-110 transition-transform">
+              <span className="material-symbols-outlined text-[19px]">inventory</span>
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-1">
@@ -198,11 +240,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* KPI 4: Low Stock Alert */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-[#efeeec] hover:shadow-md transition-all flex flex-col justify-between">
+        <div className="glass-card rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-1 transition-all duration-300 border border-[#efeeec]/90 flex flex-col justify-between group">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs uppercase tracking-wider text-[#ba1a1a] font-semibold">Low Stock Threshold</span>
-            <div className="w-8 h-8 rounded-lg bg-[#ffdad6] flex items-center justify-center text-[#93000a]">
-              <span className="material-symbols-outlined text-[18px]">warning</span>
+            <div className="w-9 h-9 rounded-xl bg-[#ffdad6] flex items-center justify-center text-[#93000a] group-hover:scale-110 transition-transform">
+              <span className="material-symbols-outlined text-[19px]">warning</span>
             </div>
           </div>
           <div className="flex items-baseline justify-between gap-1">
@@ -219,48 +261,77 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Analytics Row (8 cols + 4 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">
         {/* Left: Sales Velocity & Line/Area Chart (8 cols) */}
-        <div className="lg:col-span-8 bg-white p-5 rounded-xl shadow-sm border border-[#efeeec] flex flex-col justify-between">
+        <div className="lg:col-span-8 glass-card rounded-2xl p-5 shadow-xs hover:shadow-md transition-all duration-300 border border-[#efeeec]/90 flex flex-col justify-between">
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
-                <h2 className="text-lg text-[#1a1c1b] font-bold">Sales Analytics &amp; Revenue Velocity</h2>
-                <p className="text-xs text-[#5e5e65]">Daily store turnover and footfall throughput patterns</p>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#bb0012] animate-pulse"></span>
+                  <h2 className="text-lg text-[#1a1c1b] font-bold">
+                    {timeRange === 'today'
+                      ? "Today's Intraday Velocity vs Yesterday"
+                      : timeRange === '7d'
+                      ? '7-Day Turnover Velocity vs Prior Week'
+                      : timeRange === '30d'
+                      ? '30-Day Revenue Velocity vs Previous Cycle'
+                      : '6-Month Trajectory vs H1 Baseline'}
+                  </h2>
+                </div>
+                <p className="text-xs text-[#5e5e65]">
+                  {timeRange === 'today'
+                    ? "Hourly store turnover pacing compared to yesterday's trading curve"
+                    : timeRange === '7d'
+                    ? 'Daily sales trajectory compared with previous week same-day baseline'
+                    : timeRange === '30d'
+                    ? 'Monthly store pacing with preceding 30-day comparative run'
+                    : 'Semi-annual festive ramp-up compared to previous half-year trend'}
+                </p>
               </div>
               {/* Timeframe selector */}
-              <div className="inline-flex bg-[#f4f3f1] p-1 rounded-lg self-start">
+              <div className="inline-flex glass-subtle p-1 rounded-xl self-start border border-[#efeeec]/80">
                 {(['today', '7d', '30d', '6m'] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setTimeRange(t)}
-                    className={`px-3 py-1 rounded text-xs transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                       timeRange === t
-                        ? 'bg-white text-[#1a1c1b] font-bold shadow-sm'
+                        ? 'bg-white text-[#bb0012] font-bold shadow-xs'
                         : 'text-[#5e5e65] hover:text-[#1a1c1b]'
                     }`}
                   >
-                    {t === 'today' ? 'Today' : t === '7d' ? '7 Days' : t === '30d' ? '30 Days' : '6 Months'}
+                    {t === 'today' ? "Today vs Yesterday" : t === '7d' ? '7 Days' : t === '30d' ? '30 Days' : '6 Months'}
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Metric Callouts Strip */}
-            <div className="grid grid-cols-3 gap-3 mb-4 bg-[#f4f3f1] p-3 rounded-lg">
+            <div className="grid grid-cols-3 gap-3 mb-4 glass-subtle p-3 rounded-xl border border-[#efeeec]/70">
               <div>
-                <span className="text-xs text-[#5e5e65] block font-medium">Peak Daily Turn</span>
-                <span className="font-mono text-base font-bold text-[#1a1c1b]">₹42,150</span>
-                <span className="text-xs text-[#006947] block font-semibold">Sat Peak</span>
+                <span className="text-xs text-[#5e5e65] block font-medium">
+                  {timeRange === 'today' ? "Peak Hourly Turn" : timeRange === '7d' ? 'Best Daily Run' : 'Peak Period Turn'}
+                </span>
+                <span className="font-mono text-base font-bold text-[#1a1c1b]">
+                  {timeRange === 'today' ? '₹31,250' : timeRange === '7d' ? '₹1,40,000' : timeRange === '30d' ? '₹42,150' : '₹9,80,000'}
+                </span>
+                <span className="text-xs text-[#006947] block font-semibold">
+                  {timeRange === 'today' ? '08:00 PM (+5.9% vs Yest)' : timeRange === '7d' ? 'Sat Rush (+14.3% WoW)' : '+14.2% vs baseline'}
+                </span>
               </div>
               <div>
-                <span className="text-xs text-[#5e5e65] block font-medium">Basket Conversion</span>
-                <span className="font-mono text-base font-bold text-[#1a1c1b]">68.4%</span>
-                <span className="text-xs text-[#5e5e65] block">+3.1% vs avg</span>
+                <span className="text-xs text-[#5e5e65] block font-medium">Comparative Growth</span>
+                <span className="font-mono text-base font-bold text-[#006947]">
+                  {timeRange === 'today' ? '+9.8% DoD' : timeRange === '7d' ? '+14.2% WoW' : '+14.2% YoY'}
+                </span>
+                <span className="text-xs text-[#5e5e65] block">
+                  {timeRange === 'today' ? 'vs Yesterday (₹1,19,500)' : timeRange === '7d' ? 'vs Prior 7D (₹7,40,300)' : 'vs Prior Cycle'}
+                </span>
               </div>
               <div>
-                <span className="text-xs text-[#5e5e65] block font-medium">Rush Window</span>
+                <span className="text-xs text-[#5e5e65] block font-medium">Peak Demand Window</span>
                 <span className="font-mono text-base font-bold text-[#1a1c1b]">18:00 - 21:00</span>
-                <span className="text-xs text-[#bb0012] font-semibold block">Evening Surge</span>
+                <span className="text-xs text-[#bb0012] font-semibold block">Evening Surge Active</span>
               </div>
             </div>
 
@@ -269,12 +340,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <svg className="w-full h-full cursor-crosshair" preserveAspectRatio="none" viewBox="0 0 760 220">
                 <defs>
                   <linearGradient id="minisoAreaGrad" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#bb0012" stopOpacity="0.25"></stop>
+                    <stop offset="0%" stopColor="#bb0012" stopOpacity="0.30"></stop>
                     <stop offset="100%" stopColor="#bb0012" stopOpacity="0.00"></stop>
                   </linearGradient>
                   <linearGradient id="secondaryAreaGrad" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#006947" stopOpacity="0.15"></stop>
-                    <stop offset="100%" stopColor="#006947" stopOpacity="0.00"></stop>
+                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.20"></stop>
+                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0.00"></stop>
                   </linearGradient>
                 </defs>
                 {/* Horizontal Grid lines */}
@@ -283,27 +354,79 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <line stroke="#efeeec" strokeWidth="1" x1="0" x2="760" y1="130" y2="130"></line>
                 <line stroke="#efeeec" strokeWidth="1" x1="0" x2="760" y1="180" y2="180"></line>
 
-                {/* Area 2 (Prior Cycle Comparison) */}
-                <path d="M 10 160 Q 90 150 160 145 T 310 130 T 460 140 T 610 120 T 750 110 L 750 210 L 10 210 Z" fill="url(#secondaryAreaGrad)"></path>
-                <path d="M 10 160 Q 90 150 160 145 T 310 130 T 460 140 T 610 120 T 750 110" fill="none" stroke="#00855b" strokeDasharray="4 4" strokeWidth="1.5"></path>
+                {/* Area 2 (Prior Cycle / Previous Day Comparison) */}
+                <path 
+                  d={timeRange === 'today'
+                    ? "M 10 180 Q 120 160 200 145 T 360 125 T 480 80 T 600 50 T 750 100 L 750 210 L 10 210 Z"
+                    : timeRange === '7d'
+                    ? "M 10 180 Q 120 165 220 170 T 360 145 T 480 110 T 600 65 T 750 85 L 750 210 L 10 210 Z"
+                    : "M 10 160 Q 90 150 160 145 T 310 130 T 460 140 T 610 120 T 750 110 L 750 210 L 10 210 Z"
+                  } 
+                  fill="url(#secondaryAreaGrad)"
+                ></path>
+                <path 
+                  d={timeRange === 'today'
+                    ? "M 10 180 Q 120 160 200 145 T 360 125 T 480 80 T 600 50 T 750 100"
+                    : timeRange === '7d'
+                    ? "M 10 180 Q 120 165 220 170 T 360 145 T 480 110 T 600 65 T 750 85"
+                    : "M 10 160 Q 90 150 160 145 T 310 130 T 460 140 T 610 120 T 750 110"
+                  } 
+                  fill="none" 
+                  stroke="#6366f1" 
+                  strokeDasharray="4 4" 
+                  strokeWidth="2"
+                ></path>
 
                 {/* Area 1 (Current Period Sales) */}
-                <path d="M 10 150 Q 80 140 140 90 T 260 110 T 380 60 T 500 120 T 620 40 T 750 55 L 750 210 L 10 210 Z" fill="url(#minisoAreaGrad)"></path>
-                <path d="M 10 150 Q 80 140 140 90 T 260 110 T 380 60 T 500 120 T 620 40 T 750 55" fill="none" stroke="#bb0012" strokeLinecap="round" strokeWidth="3"></path>
+                <path 
+                  d={timeRange === 'today'
+                    ? "M 10 170 Q 120 150 200 130 T 360 110 T 480 60 T 600 30 T 750 80 L 750 210 L 10 210 Z"
+                    : timeRange === '7d'
+                    ? "M 10 160 Q 120 140 220 150 T 360 120 T 480 80 T 600 35 T 750 50 L 750 210 L 10 210 Z"
+                    : "M 10 150 Q 80 140 140 90 T 260 110 T 380 60 T 500 120 T 620 40 T 750 55 L 750 210 L 10 210 Z"
+                  } 
+                  fill="url(#minisoAreaGrad)"
+                ></path>
+                <path 
+                  d={timeRange === 'today'
+                    ? "M 10 170 Q 120 150 200 130 T 360 110 T 480 60 T 600 30 T 750 80"
+                    : timeRange === '7d'
+                    ? "M 10 160 Q 120 140 220 150 T 360 120 T 480 80 T 600 35 T 750 50"
+                    : "M 10 150 Q 80 140 140 90 T 260 110 T 380 60 T 500 120 T 620 40 T 750 55"
+                  } 
+                  fill="none" 
+                  stroke="#bb0012" 
+                  strokeLinecap="round" 
+                  strokeWidth="3"
+                ></path>
 
-                {/* Active Data Points */}
-                <circle cx="140" cy="90" fill="#bb0012" r="4" className="cursor-pointer" onClick={() => setHoveredPoint(140)}></circle>
-                <circle cx="380" cy="60" fill="#bb0012" r="4" className="cursor-pointer" onClick={() => setHoveredPoint(380)}></circle>
-                <circle cx="620" cy="40" fill="#bb0012" r="6" stroke="#ffffff" strokeWidth="2" className="cursor-pointer animate-pulse" onClick={() => setHoveredPoint(620)}></circle>
+                {/* Active Interactive Data Points */}
+                <circle cx={timeRange === 'today' ? 200 : 140} cy={timeRange === 'today' ? 130 : 90} fill="#bb0012" r="4.5" className="cursor-pointer hover:scale-125 transition-transform" onClick={() => setHoveredPoint(140)}></circle>
+                <circle cx={timeRange === 'today' ? 480 : 380} cy={timeRange === 'today' ? 60 : 60} fill="#bb0012" r="4.5" className="cursor-pointer hover:scale-125 transition-transform" onClick={() => setHoveredPoint(380)}></circle>
+                <circle cx={timeRange === 'today' ? 600 : 620} cy={timeRange === 'today' ? 30 : 40} fill="#bb0012" r="6" stroke="#ffffff" strokeWidth="2.5" className="cursor-pointer animate-pulse hover:scale-125 transition-transform" onClick={() => setHoveredPoint(620)}></circle>
               </svg>
 
               {/* Floating Data Annotation Tooltip */}
               {hoveredPoint === 620 && (
-                <div className="absolute left-[72%] top-[8%] -translate-x-1/2 bg-[#1a1c1b] text-white p-2.5 px-3 rounded-lg shadow-xl pointer-events-none flex flex-col items-start gap-0.5 border border-white/10 z-10">
-                  <span className="text-[10px] text-[#e3e2e0] uppercase tracking-wider font-semibold">Oct 24 • Saturday Rush</span>
-                  <div className="flex items-center gap-2 font-mono font-bold text-sm">
-                    <span className="text-[#6ffbbe]">₹38,420</span>
-                    <span className="text-[#e3e2e0] font-normal text-xs">| 112 orders</span>
+                <div className="absolute left-[72%] top-[8%] -translate-x-1/2 glass-card-dark text-white p-3 rounded-xl shadow-2xl pointer-events-none flex flex-col items-start gap-1 border border-white/10 z-10 backdrop-blur-md min-w-[210px]">
+                  <span className="text-[10px] text-[#e3e2e0] uppercase tracking-wider font-semibold">
+                    {timeRange === 'today' ? '08:00 PM Intraday Surge' : timeRange === '7d' ? 'Sat Oct 23 Peak Run' : 'Oct 24 • Saturday Rush'}
+                  </span>
+                  <div className="flex items-center justify-between w-full font-mono text-xs">
+                    <span className="text-[#a1a1aa]">Current:</span>
+                    <span className="text-[#6ffbbe] font-bold">
+                      {timeRange === 'today' ? '₹31,250' : timeRange === '7d' ? '₹1,40,000' : '₹38,420'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between w-full font-mono text-xs">
+                    <span className="text-[#a1a1aa]">Previous:</span>
+                    <span className="text-[#cbd5e1]">
+                      {timeRange === 'today' ? '₹29,500' : timeRange === '7d' ? '₹1,22,500' : '₹31,500'}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-[#6ffbbe] font-mono border-t border-white/10 pt-1 w-full flex justify-between">
+                    <span>Performance Delta:</span>
+                    <span className="font-bold">+5.9% (+₹1,750)</span>
                   </div>
                 </div>
               )}
@@ -311,38 +434,77 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {/* Axis Labels */}
             <div className="flex justify-between text-[#5e5e65] font-mono text-xs mt-1 px-2">
-              <span>Oct 01</span>
-              <span>Oct 07</span>
-              <span>Oct 14</span>
-              <span>Oct 21 (Diwali Prep)</span>
-              <span>Oct 28</span>
-              <span>Today</span>
+              {timeRange === 'today' ? (
+                <>
+                  <span>10:00 AM</span>
+                  <span>12:00 PM</span>
+                  <span>02:00 PM</span>
+                  <span>04:00 PM</span>
+                  <span>06:00 PM</span>
+                  <span>08:00 PM</span>
+                  <span>10:00 PM</span>
+                </>
+              ) : timeRange === '7d' ? (
+                <>
+                  <span>Mon 18</span>
+                  <span>Tue 19</span>
+                  <span>Wed 20</span>
+                  <span>Thu 21</span>
+                  <span>Fri 22</span>
+                  <span>Sat 23</span>
+                  <span>Today</span>
+                </>
+              ) : timeRange === '30d' ? (
+                <>
+                  <span>Oct 01</span>
+                  <span>Oct 07</span>
+                  <span>Oct 14</span>
+                  <span>Oct 21 (Diwali Prep)</span>
+                  <span>Oct 28</span>
+                  <span>Today</span>
+                </>
+              ) : (
+                <>
+                  <span>May</span>
+                  <span>Jun</span>
+                  <span>Jul</span>
+                  <span>Aug</span>
+                  <span>Sep</span>
+                  <span>Oct (Festive)</span>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-3 mt-3 bg-[#f4f3f1] px-4 py-2 rounded-lg">
-            <div className="flex items-center gap-4 text-xs font-medium">
+          <div className="flex items-center justify-between pt-3 mt-3 glass-subtle px-4 py-2.5 rounded-xl border border-[#efeeec]/70">
+            <div className="flex items-center gap-4 text-xs font-medium flex-wrap">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-1 bg-[#bb0012] rounded-full"></span>
-                <span className="text-[#1a1c1b]">Current Cycle (₹8,45,600)</span>
+                <span className="text-[#1a1c1b]">
+                  {timeRange === 'today' ? 'Today (₹1,31,250)' : timeRange === '7d' ? 'Current 7 Days (₹8,45,600)' : 'Current Cycle (₹8,45,600)'}
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-1 bg-[#006947] rounded-full"></span>
-                <span className="text-[#5e5e65]">Previous 30 Days</span>
+                <span className="w-3 h-1 bg-[#6366f1] rounded-full"></span>
+                <span className="text-[#5e5e65]">
+                  {timeRange === 'today' ? 'Yesterday (₹1,19,500)' : timeRange === '7d' ? 'Prior 7 Days (₹7,40,300)' : 'Previous 30 Days'}
+                </span>
               </div>
             </div>
-            <span className="font-mono text-xs text-[#006947] font-bold">Java ML Engine: ARIMA Trend Fit 96.4%</span>
+            <span className="font-mono text-xs text-[#006947] font-bold">
+              Java ML Engine: ARIMA Trend Fit 96.4%
+            </span>
           </div>
         </div>
 
         {/* Right: Festival Demand Prediction Spotlight (4 cols) */}
-        <div className="lg:col-span-4 bg-white p-5 rounded-xl shadow-sm border border-[#efeeec] flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute -right-12 -top-12 w-44 h-44 rounded-full bg-[#bb0012]/10 blur-2xl pointer-events-none"></div>
+        <div className="lg:col-span-4 glass-card rounded-2xl shadow-sm border border-[#efeeec]/90 p-5 flex flex-col justify-between relative overflow-hidden group">
+          <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-[#bb0012]/15 blur-3xl animate-glow-pulse pointer-events-none"></div>
           <div className="flex flex-col gap-4 relative z-10">
             {/* Festive Badge Banner */}
-            <div className="bg-gradient-to-r from-[#bb0012] to-[#e7151f] p-4 rounded-xl text-white flex flex-col gap-1.5 shadow-sm">
+            <div className="bg-gradient-to-r from-[#bb0012] via-[#d60e1d] to-[#e7151f] p-4 rounded-xl text-white flex flex-col gap-1.5 shadow-md">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold tracking-wider uppercase bg-white/20 px-2 py-0.5 rounded">
+                <span className="text-[11px] font-bold tracking-wider uppercase bg-white/20 backdrop-blur-xs px-2 py-0.5 rounded">
                   Upcoming Festival
                 </span>
                 <span className="text-sm font-bold">🪔 12 Days Left</span>
@@ -354,7 +516,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Predicted Impact Stats */}
-            <div className="bg-[#f4f3f1] p-3.5 rounded-xl flex flex-col gap-2">
+            <div className="glass-subtle p-3.5 rounded-xl flex flex-col gap-2 border border-[#efeeec]/70">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-[#5e5e65]">Projected Footfall Spike</span>
                 <span className="text-base text-[#bb0012] font-bold">+38%</span>
@@ -369,7 +531,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Stock Readiness Progress Meter */}
-            <div className="bg-[#f4f3f1] p-3.5 rounded-xl flex flex-col gap-1.5">
+            <div className="glass-subtle p-3.5 rounded-xl flex flex-col gap-1.5 border border-[#efeeec]/70">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-[#1a1c1b]">Diwali Preparedness Index</span>
                 <span className="text-xs font-bold text-[#1a1c1b]">62% Stocked</span>
@@ -381,7 +543,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Urgent Restock Alert Callout */}
-            <div className="bg-[#ffdad6]/70 p-3 rounded-lg flex items-start gap-2.5 border border-[#ffb4ab]">
+            <div className="bg-[#ffdad6]/80 backdrop-blur-xs p-3 rounded-xl flex items-start gap-2.5 border border-[#ffb4ab]">
               <span className="material-symbols-outlined text-[#93000a] text-[20px] shrink-0 mt-0.5">priority_high</span>
               <p className="text-xs text-[#93000a] leading-snug">
                 <strong>Critical Alert:</strong> Gift Sets &amp; Sanrio Plush Toys will run out in <strong>4 days</strong> at current velocity. Recommended buffer: <strong>+450 units</strong>.
@@ -393,7 +555,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button
               type="button"
               onClick={() => setShowAiModal(true)}
-              className="w-full bg-[#1a1c1b] hover:bg-[#2f3130] text-white font-semibold text-sm py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm"
+              className="w-full bg-[#1a1c1b] hover:bg-[#2f3130] text-white font-semibold text-sm py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow hover:-translate-y-0.5"
             >
               <span className="material-symbols-outlined text-[18px]">psychology</span>
               <span>View AI Allocation Plan</span>
@@ -402,12 +564,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Recharts Daily Sales Volume vs Store Target Bar Chart */}
-      <div className="bg-white rounded-xl shadow-sm border border-[#efeeec] p-5 mb-6 flex flex-col gap-4">
+      {/* Recharts Daily Sales Volume vs Store Target Bar Chart (with Previous Days Data) */}
+      <div className="glass-card rounded-2xl shadow-sm border border-[#efeeec]/90 p-5 mb-6 flex flex-col gap-4">
         {/* Card Header & Controls */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#f4f3f1] pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#ffdad6]/60 text-[#bb0012] flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[#ffdad6]/70 text-[#bb0012] flex items-center justify-center shrink-0 shadow-xs">
               <span className="material-symbols-outlined text-[24px]">bar_chart</span>
             </div>
             <div className="flex flex-col">
@@ -419,41 +581,55 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-[#006947] animate-pulse"></span>
                   Pacing Ahead ({achievementPct}%)
                 </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#f4f3f1] text-[#6366f1]">
+                  +{dayOverDayGrowth}% vs Yesterday
+                </span>
               </div>
               <p className="text-xs text-[#5e5e65]">
-                Intraday throughput snapshot giving managers a real-time comparison against Store #104 daily target of {dailyTarget} units
+                Multi-day and intraday comparison giving managers a clear snapshot of current performance against Store #104 daily target of {dailyTarget} units and previous days' data
               </p>
             </div>
           </div>
 
-          {/* Controls: Slot toggle & Target Calibration */}
+          {/* Controls: Time slice selector & Target Calibration */}
           <div className="flex items-center gap-2 self-start lg:self-auto flex-wrap">
-            <div className="flex items-center gap-1 bg-[#f4f3f1] p-1 rounded-lg border border-[#efeeec] text-xs">
+            <div className="flex items-center gap-1 glass-subtle p-1 rounded-xl border border-[#efeeec]/80 text-xs">
               <button
                 type="button"
-                onClick={() => setChartViewMode('hourly')}
-                className={`px-3 py-1.5 rounded-md font-semibold transition-all ${
-                  chartViewMode === 'hourly'
+                onClick={() => setChartViewMode('today-vs-yesterday')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
+                  chartViewMode === 'today-vs-yesterday'
                     ? 'bg-white text-[#bb0012] shadow-xs'
                     : 'text-[#5e5e65] hover:text-[#1a1c1b]'
                 }`}
               >
-                Today's Hourly Slots
+                Today vs Yesterday (Hourly)
               </button>
               <button
                 type="button"
                 onClick={() => setChartViewMode('7days')}
-                className={`px-3 py-1.5 rounded-md font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
                   chartViewMode === '7days'
                     ? 'bg-white text-[#bb0012] shadow-xs'
                     : 'text-[#5e5e65] hover:text-[#1a1c1b]'
                 }`}
               >
-                Past 7 Days
+                Past 7 Days (vs Prior Week)
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartViewMode('14days')}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
+                  chartViewMode === '14days'
+                    ? 'bg-white text-[#bb0012] shadow-xs'
+                    : 'text-[#5e5e65] hover:text-[#1a1c1b]'
+                }`}
+              >
+                Past 14 Days
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-[#f4f3f1] px-2.5 py-1.5 rounded-lg border border-[#efeeec] text-xs">
+            <div className="flex items-center gap-1.5 glass-subtle px-2.5 py-1.5 rounded-xl border border-[#efeeec]/80 text-xs">
               <span className="text-[#5e5e65] font-medium">Daily Target:</span>
               <select
                 value={dailyTarget}
@@ -473,8 +649,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Manager Summary Quick Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#faf9f7] p-3 rounded-xl border border-[#efeeec]">
+        {/* Manager Summary Quick Strip (Today vs Previous Days vs Target) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 glass-subtle p-3 rounded-xl border border-[#efeeec]/70">
           <div className="flex flex-col">
             <span className="text-[11px] text-[#5e5e65]">Today's Target Volume</span>
             <span className="text-lg font-bold font-mono text-[#1a1c1b]">
@@ -482,9 +658,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[11px] text-[#5e5e65]">Actual Sold Volume</span>
+            <span className="text-[11px] text-[#5e5e65]">Actual Sold Today</span>
             <span className="text-lg font-bold font-mono text-[#bb0012]">
               {todayActualUnits} <span className="text-xs font-normal text-[#5e5e65]">units</span>
+            </span>
+            <span className="text-[11px] text-[#5e5e65] font-mono">₹{todayRevenue.toLocaleString('en-IN')}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[11px] text-[#5e5e65]">Yesterday's Sold Volume</span>
+            <span className="text-lg font-bold font-mono text-[#6366f1]">
+              {yesterdayActualUnits} <span className="text-xs font-normal text-[#5e5e65]">units</span>
+            </span>
+            <span className="text-[11px] text-[#006947] font-semibold">
+              +{dayOverDayGrowth}% Day-over-Day
             </span>
           </div>
           <div className="flex flex-col">
@@ -495,12 +681,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 ({isAhead ? `+${varianceUnits} surplus` : `${varianceUnits} deficit`})
               </span>
             </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[11px] text-[#5e5e65]">Attributed Day Sales</span>
-            <span className="text-lg font-bold font-mono text-[#1a1c1b]">
-              ₹{todayRevenue.toLocaleString('en-IN')}
-            </span>
+            <span className="text-[11px] text-[#5e5e65]">7-Day Baseline: ~{sevenDayPriorAvg}u/d</span>
           </div>
         </div>
 
@@ -528,40 +709,69 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <Tooltip
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length) {
-                    const actualVal = (payload.find(p => p.dataKey === 'actual')?.value as number) || 0;
-                    const targetVal = (payload.find(p => p.dataKey === 'target')?.value as number) || 0;
-                    const diff = actualVal - targetVal;
                     const dataObj = payload[0]?.payload;
+                    const todayVal = dataObj?.today ?? dataObj?.actual ?? 0;
+                    const prevVal = dataObj?.yesterday ?? dataObj?.previousWeek ?? dataObj?.previousPeriod ?? 0;
+                    const targetVal = dataObj?.target ?? 0;
+                    const dodDiff = todayVal - prevVal;
+                    const dodPct = prevVal > 0 ? ((dodDiff / prevVal) * 100).toFixed(1) : '0';
+
                     return (
-                      <div className="bg-[#1a1c1b] text-white p-3 rounded-xl shadow-xl border border-white/10 text-xs font-sans min-w-[210px]">
-                        <div className="font-bold text-xs text-[#e3e2e0] border-b border-white/10 pb-1 mb-2 font-mono">
-                          {label}
+                      <div className="glass-card-dark text-white p-3.5 rounded-xl shadow-2xl border border-white/10 text-xs font-sans min-w-[240px] backdrop-blur-md">
+                        <div className="font-bold text-xs text-[#e3e2e0] border-b border-white/10 pb-1.5 mb-2 font-mono flex items-center justify-between">
+                          <span>{label}</span>
+                          <span className="text-[10px] text-[#6ffbbe] font-normal">
+                            {chartViewMode === 'today-vs-yesterday' 
+                              ? 'Today vs Yesterday' 
+                              : chartViewMode === '7days' 
+                              ? 'Week-over-Week' 
+                              : '14-Day Trajectory'}
+                          </span>
                         </div>
                         <div className="space-y-1.5">
                           <div className="flex justify-between items-center">
                             <span className="text-[#a1a1aa] flex items-center gap-1.5">
                               <span className="w-2.5 h-2.5 rounded-sm bg-[#bb0012]"></span>
-                              Actual Sold Volume:
+                              {chartViewMode === 'today-vs-yesterday' ? "Today's Volume:" : "Current Day Volume:"}
                             </span>
-                            <span className="font-mono font-bold text-white">{actualVal} units</span>
+                            <span className="font-mono font-bold text-white">{todayVal} units</span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="text-[#a1a1aa] flex items-center gap-1.5">
-                              <span className="w-2.5 h-2.5 rounded-sm bg-[#94a3b8]"></span>
-                              Pacing Target:
+                              <span className="w-2.5 h-2.5 rounded-sm bg-[#6366f1]"></span>
+                              {chartViewMode === 'today-vs-yesterday' 
+                                ? "Yesterday's Volume:" 
+                                : chartViewMode === '7days' 
+                                ? "Prior Week Same Day:" 
+                                : "Prior Period Baseline:"}
                             </span>
-                            <span className="font-mono font-semibold text-[#cbd5e1]">{targetVal} units</span>
+                            <span className="font-mono font-semibold text-[#cbd5e1]">{prevVal} units</span>
                           </div>
-                          <div className="flex justify-between items-center pt-1 border-t border-white/10">
-                            <span className="text-[#a1a1aa]">Performance Variance:</span>
-                            <span className={`font-mono font-bold ${diff >= 0 ? 'text-[#6ffbbe]' : 'text-[#ffb4ab]'}`}>
-                              {diff >= 0 ? `+${diff} units (Ahead)` : `${diff} units (Behind)`}
+                          {targetVal > 0 && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-[#a1a1aa] flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-sm bg-[#cbd5e1]"></span>
+                                Pacing Benchmark:
+                              </span>
+                              <span className="font-mono text-[#cbd5e1]">{targetVal} units</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center pt-1.5 border-t border-white/10">
+                            <span className="text-[#a1a1aa]">Comparative Delta:</span>
+                            <span className={`font-mono font-bold ${dodDiff >= 0 ? 'text-[#6ffbbe]' : 'text-[#ffb4ab]'}`}>
+                              {dodDiff >= 0 ? `+${dodDiff}u (+${dodPct}%)` : `${dodDiff}u (${dodPct}%)`}
                             </span>
                           </div>
-                          {dataObj?.revenue && (
-                            <div className="flex justify-between items-center text-[10px] text-[#a1a1aa] pt-0.5">
-                              <span>Period Turnover:</span>
-                              <span className="font-mono text-white">₹{dataObj.revenue.toLocaleString('en-IN')}</span>
+                          {dataObj?.todayRevenue && (
+                            <div className="flex justify-between items-center text-[11px] text-[#a1a1aa] pt-0.5">
+                              <span>Today's Slot Revenue:</span>
+                              <span className="font-mono text-white">₹{dataObj.todayRevenue.toLocaleString('en-IN')}</span>
+                            </div>
+                          )}
+                          {dataObj?.yesterdayRevenue && (
+                            <div className="flex justify-between items-center text-[10px] text-[#94a3b8]">
+                              <span>Yesterday's Slot Revenue:</span>
+                              <span className="font-mono text-[#cbd5e1]">₹{dataObj.yesterdayRevenue.toLocaleString('en-IN')}</span>
                             </div>
                           )}
                         </div>
@@ -578,44 +788,96 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 iconType="rect"
               />
               <ReferenceLine 
-                y={chartViewMode === 'hourly' ? Math.round(dailyTarget / 7) : dailyTarget} 
+                y={chartViewMode === 'today-vs-yesterday' ? Math.round(dailyTarget / 7) : dailyTarget} 
                 stroke="#d97706" 
                 strokeDasharray="4 4"
                 label={{ 
-                  value: chartViewMode === 'hourly' ? `Avg Target Slot (${Math.round(dailyTarget/7)}u)` : `Daily Target (${dailyTarget}u)`, 
+                  value: chartViewMode === 'today-vs-yesterday' ? `Avg Target Slot (${Math.round(dailyTarget/7)}u)` : `Daily Target (${dailyTarget}u)`, 
                   fill: '#b45309', 
                   fontSize: 10,
                   position: 'insideTopRight'
                 }} 
               />
-              <Bar 
-                dataKey="actual" 
-                name="Actual Sales Volume (Units)" 
-                fill="#bb0012" 
-                radius={[4, 4, 0, 0]}
-                maxBarSize={38}
-              />
-              <Bar 
-                dataKey="target" 
-                name="Target Benchmark (Units)" 
-                fill="#cbd5e1" 
-                radius={[4, 4, 0, 0]}
-                maxBarSize={38}
-              />
+              {chartViewMode === 'today-vs-yesterday' ? (
+                <>
+                  <Bar 
+                    dataKey="today" 
+                    name="Today's Actual Volume (Units)" 
+                    fill="#bb0012" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={30}
+                  />
+                  <Bar 
+                    dataKey="yesterday" 
+                    name="Yesterday's Volume (Units)" 
+                    fill="#6366f1" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={30}
+                  />
+                  <Bar 
+                    dataKey="target" 
+                    name="Target Benchmark (Units)" 
+                    fill="#cbd5e1" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={30}
+                  />
+                </>
+              ) : chartViewMode === '7days' ? (
+                <>
+                  <Bar 
+                    dataKey="actual" 
+                    name="Current Week Volume (Units)" 
+                    fill="#bb0012" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={30}
+                  />
+                  <Bar 
+                    dataKey="previousWeek" 
+                    name="Prior Week Same Day (Units)" 
+                    fill="#6366f1" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={30}
+                  />
+                  <Bar 
+                    dataKey="target" 
+                    name="Daily Target Benchmark (Units)" 
+                    fill="#cbd5e1" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={30}
+                  />
+                </>
+              ) : (
+                <>
+                  <Bar 
+                    dataKey="actual" 
+                    name="Daily Sold Volume (Units)" 
+                    fill="#bb0012" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={16}
+                  />
+                  <Bar 
+                    dataKey="previousPeriod" 
+                    name="Prior Period Baseline (Units)" 
+                    fill="#6366f1" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={16}
+                  />
+                </>
+              )}
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         {/* Manager Insights Footer */}
-        <div className="p-3 bg-[#f4f3f1] rounded-lg flex flex-col sm:flex-row items-center justify-between text-xs text-[#5e5e65] gap-2">
+        <div className="p-3.5 glass-subtle rounded-xl flex flex-col sm:flex-row items-center justify-between text-xs text-[#5e5e65] gap-2 border border-[#efeeec]/70">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[18px] text-[#006947]">verified</span>
             <span>
-              <strong>Intraday Manager Insight:</strong> Peak sales volume peaked at <strong>08:00 PM (125 units)</strong>, exceeding slot target by <strong>+30 units</strong>. Store is pacing <strong>+25.0% ahead</strong> of the daily {dailyTarget}-unit objective.
+              <strong>Manager Performance Snapshot:</strong> Peak hourly sales volume peaked at <strong>08:00 PM (125 units)</strong> vs yesterday's <strong>118 units</strong> (+5.9% DoD). Today's total of <strong>{todayActualUnits} units</strong> is pacing <strong>+{varianceUnits} units (+{achievementPct}%) ahead</strong> of the store daily {dailyTarget}-unit target.
             </span>
           </div>
-          <span className="font-mono text-[11px] text-[#006947] shrink-0 font-semibold">
-            Status: Daily Target Exceeded ✓
+          <span className="font-mono text-[11px] text-[#006947] shrink-0 font-bold bg-[#6ffbbe]/30 px-3 py-1 rounded-full border border-[#006947]/20">
+            Status: Target Exceeded (+{varianceUnits}u) ✓
           </span>
         </div>
       </div>
