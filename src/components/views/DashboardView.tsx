@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Product, SystemTelemetry } from '../../types/retail';
 import {
   ResponsiveContainer,
+  AreaChart,
+  Area,
   BarChart,
   Bar,
   XAxis,
@@ -10,22 +12,7 @@ import {
   Tooltip,
   Legend,
   ReferenceLine,
-  Cell
 } from 'recharts';
-
-interface DailyVolumeChartItem {
-  slot: string;
-  today?: number;
-  yesterday?: number;
-  actual?: number;
-  previousWeek?: number;
-  previousPeriod?: number;
-  target?: number;
-  todayRevenue?: number;
-  yesterdayRevenue?: number;
-  revenue?: number;
-  prevRevenue?: number;
-}
 
 interface DashboardViewProps {
   products: Product[];
@@ -44,72 +31,75 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   telemetry,
   addToast,
 }) => {
-  const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d' | '6m'>('30d');
-  const [reorderedItems, setReorderedItems] = useState<Record<string, boolean>>({});
-  const [hoveredPoint, setHoveredPoint] = useState<number | null>(620);
-  const [showAiModal, setShowAiModal] = useState(false);
-  const [showStreamlitDeployModal, setShowStreamlitDeployModal] = useState(false);
-
-  // Daily Sales Volume vs Store Target State
+  const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d'>('today');
+  const [metricMode, setMetricMode] = useState<'revenue' | 'units'>('revenue');
+  const [chartType, setChartType] = useState<'area' | 'bar'>('area');
   const [dailyTarget, setDailyTarget] = useState<number>(420);
-  const [chartViewMode, setChartViewMode] = useState<'today-vs-yesterday' | '7days' | '14days'>('today-vs-yesterday');
+  const [reorderedItems, setReorderedItems] = useState<Record<string, boolean>>({});
+  const [showAiModal, setShowAiModal] = useState(false);
 
-  // Intraday Hourly Volume: Today vs Yesterday vs Target
-  const hourlyComparisonData = [
-    { slot: '10:00 AM', today: 28, yesterday: 24, target: Math.round(dailyTarget * 0.05), todayRevenue: 7000, yesterdayRevenue: 6000 },
-    { slot: '12:00 PM', today: 52, yesterday: 46, target: Math.round(dailyTarget * 0.10), todayRevenue: 13000, yesterdayRevenue: 11500 },
-    { slot: '02:00 PM', today: 64, yesterday: 58, target: Math.round(dailyTarget * 0.12), todayRevenue: 16000, yesterdayRevenue: 14500 },
-    { slot: '04:00 PM', today: 78, yesterday: 72, target: Math.round(dailyTarget * 0.15), todayRevenue: 19500, yesterdayRevenue: 18000 },
-    { slot: '06:00 PM', today: 108, yesterday: 95, target: Math.round(dailyTarget * 0.22), todayRevenue: 27000, yesterdayRevenue: 23750 },
-    { slot: '08:00 PM', today: 125, yesterday: 118, target: Math.round(dailyTarget * 0.24), todayRevenue: 31250, yesterdayRevenue: 29500 },
-    { slot: '10:00 PM', today: 70, yesterday: 65, target: Math.round(dailyTarget * 0.12), todayRevenue: 17500, yesterdayRevenue: 16250 },
+  // Intraday Hourly Volume & Revenue: Today vs Yesterday vs Target
+  const hourlyData = [
+    { slot: '10:00 AM', currentRevenue: 7000, previousRevenue: 6000, currentUnits: 28, previousUnits: 24, targetUnits: 21, targetRevenue: 5250 },
+    { slot: '12:00 PM', currentRevenue: 13000, previousRevenue: 11500, currentUnits: 52, previousUnits: 46, targetUnits: 42, targetRevenue: 10500 },
+    { slot: '02:00 PM', currentRevenue: 16000, previousRevenue: 14500, currentUnits: 64, previousUnits: 58, targetUnits: 50, targetRevenue: 12500 },
+    { slot: '04:00 PM', currentRevenue: 19500, previousRevenue: 18000, currentUnits: 78, previousUnits: 72, targetUnits: 63, targetRevenue: 15750 },
+    { slot: '06:00 PM', currentRevenue: 27000, previousRevenue: 23750, currentUnits: 108, previousUnits: 95, targetUnits: 92, targetRevenue: 23000 },
+    { slot: '08:00 PM', currentRevenue: 31250, previousRevenue: 29500, currentUnits: 125, previousUnits: 118, targetUnits: 101, targetRevenue: 25250 },
+    { slot: '10:00 PM', currentRevenue: 17500, previousRevenue: 16250, currentUnits: 70, previousUnits: 65, targetUnits: 51, targetRevenue: 12750 },
   ];
 
   // 7-Day Performance: Current Week vs Prior Week Same Day
-  const weeklyComparisonData = [
-    { slot: 'Mon Oct 18', actual: 380, previousWeek: 340, target: dailyTarget, revenue: 95000, prevRevenue: 85000 },
-    { slot: 'Tue Oct 19', actual: 410, previousWeek: 365, target: dailyTarget, revenue: 102500, prevRevenue: 91250 },
-    { slot: 'Wed Oct 20', actual: 395, previousWeek: 350, target: dailyTarget, revenue: 98750, prevRevenue: 87500 },
-    { slot: 'Thu Oct 21', actual: 435, previousWeek: 380, target: dailyTarget, revenue: 108750, prevRevenue: 95000 },
-    { slot: 'Fri Oct 22', actual: 485, previousWeek: 420, target: dailyTarget, revenue: 121250, prevRevenue: 105000 },
-    { slot: 'Sat Oct 23', actual: 560, previousWeek: 490, target: Math.round(dailyTarget * 1.15), revenue: 140000, prevRevenue: 122500 },
-    { slot: 'Sun Oct 24 (Today)', actual: 525, previousWeek: 460, target: dailyTarget, revenue: 131250, prevRevenue: 115000 },
+  const sevenDayData = [
+    { slot: 'Mon 18', currentRevenue: 95000, previousRevenue: 85000, currentUnits: 380, previousUnits: 340, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Tue 19', currentRevenue: 102500, previousRevenue: 91250, currentUnits: 410, previousUnits: 365, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Wed 20', currentRevenue: 98750, previousRevenue: 87500, currentUnits: 395, previousUnits: 350, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Thu 21', currentRevenue: 108750, previousRevenue: 95000, currentUnits: 435, previousUnits: 380, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Fri 22', currentRevenue: 121250, previousRevenue: 105000, currentUnits: 485, previousUnits: 420, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Sat 23', currentRevenue: 140000, previousRevenue: 122500, currentUnits: 560, previousUnits: 490, targetUnits: Math.round(dailyTarget * 1.15), targetRevenue: Math.round(dailyTarget * 1.15 * 250) },
+    { slot: 'Today (Sun)', currentRevenue: 131250, previousRevenue: 115000, currentUnits: 525, previousUnits: 460, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
   ];
 
-  // 14-Day Consecutive Daily Historical Volume vs Target & Baseline
-  const fourteenDayData = [
-    { slot: 'Oct 11', actual: 355, previousPeriod: 320, target: dailyTarget, revenue: 88750 },
-    { slot: 'Oct 12', actual: 368, previousPeriod: 335, target: dailyTarget, revenue: 92000 },
-    { slot: 'Oct 13', actual: 342, previousPeriod: 310, target: dailyTarget, revenue: 85500 },
-    { slot: 'Oct 14', actual: 385, previousPeriod: 345, target: dailyTarget, revenue: 96250 },
-    { slot: 'Oct 15', actual: 420, previousPeriod: 375, target: dailyTarget, revenue: 105000 },
-    { slot: 'Oct 16', actual: 495, previousPeriod: 440, target: Math.round(dailyTarget * 1.15), revenue: 123750 },
-    { slot: 'Oct 17', actual: 465, previousPeriod: 415, target: dailyTarget, revenue: 116250 },
-    { slot: 'Oct 18', actual: 380, previousPeriod: 340, target: dailyTarget, revenue: 95000 },
-    { slot: 'Oct 19', actual: 410, previousPeriod: 365, target: dailyTarget, revenue: 102500 },
-    { slot: 'Oct 20', actual: 395, previousPeriod: 350, target: dailyTarget, revenue: 98750 },
-    { slot: 'Oct 21', actual: 435, previousPeriod: 380, target: dailyTarget, revenue: 108750 },
-    { slot: 'Oct 22', actual: 485, previousPeriod: 420, target: dailyTarget, revenue: 121250 },
-    { slot: 'Oct 23', actual: 560, previousPeriod: 490, target: Math.round(dailyTarget * 1.15), revenue: 140000 },
-    { slot: 'Today', actual: 525, previousPeriod: 460, target: dailyTarget, revenue: 131250 },
+  // 30-Day Velocity Trajectory with Preceding Month Baseline
+  const thirtyDayData = [
+    { slot: 'Oct 01', currentRevenue: 78000, previousRevenue: 71000, currentUnits: 310, previousUnits: 285, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Oct 04', currentRevenue: 84000, previousRevenue: 76000, currentUnits: 335, previousUnits: 305, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Oct 07', currentRevenue: 92000, previousRevenue: 82000, currentUnits: 370, previousUnits: 330, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Oct 10', currentRevenue: 95000, previousRevenue: 86000, currentUnits: 380, previousUnits: 345, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Oct 13', currentRevenue: 88000, previousRevenue: 80000, currentUnits: 350, previousUnits: 320, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Oct 16', currentRevenue: 124000, previousRevenue: 110000, currentUnits: 495, previousUnits: 440, targetUnits: Math.round(dailyTarget * 1.15), targetRevenue: Math.round(dailyTarget * 1.15 * 250) },
+    { slot: 'Oct 19', currentRevenue: 102500, previousRevenue: 91250, currentUnits: 410, previousUnits: 365, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Oct 21', currentRevenue: 108750, previousRevenue: 95000, currentUnits: 435, previousUnits: 380, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
+    { slot: 'Oct 23', currentRevenue: 140000, previousRevenue: 122500, currentUnits: 560, previousUnits: 490, targetUnits: Math.round(dailyTarget * 1.15), targetRevenue: Math.round(dailyTarget * 1.15 * 250) },
+    { slot: 'Today', currentRevenue: 131250, previousRevenue: 115000, currentUnits: 525, previousUnits: 460, targetUnits: dailyTarget, targetRevenue: dailyTarget * 250 },
   ];
 
-  const currentChartData: DailyVolumeChartItem[] = 
-    chartViewMode === 'today-vs-yesterday' 
-      ? hourlyComparisonData 
-      : chartViewMode === '7days' 
-      ? weeklyComparisonData 
-      : fourteenDayData;
+  // Dynamic Chart Data mapping based on active metric
+  const chartData = useMemo(() => {
+    const raw = timeRange === 'today' ? hourlyData : timeRange === '7d' ? sevenDayData : thirtyDayData;
+    return raw.map((item) => ({
+      slot: item.slot,
+      current: metricMode === 'revenue' ? item.currentRevenue : item.currentUnits,
+      previous: metricMode === 'revenue' ? item.previousRevenue : item.previousUnits,
+      target: metricMode === 'revenue' ? item.targetRevenue : item.targetUnits,
+      currentRevenue: item.currentRevenue,
+      previousRevenue: item.previousRevenue,
+      currentUnits: item.currentUnits,
+      previousUnits: item.previousUnits,
+      targetUnits: item.targetUnits,
+      targetRevenue: item.targetRevenue,
+    }));
+  }, [timeRange, metricMode, dailyTarget]);
 
-  const todayActualUnits = hourlyComparisonData.reduce((acc, d) => acc + d.today, 0); // 525 units
-  const yesterdayActualUnits = hourlyComparisonData.reduce((acc, d) => acc + d.yesterday, 0); // 478 units
-  const todayRevenue = hourlyComparisonData.reduce((acc, d) => acc + d.todayRevenue, 0); // ₹1,31,250
-  const yesterdayRevenue = hourlyComparisonData.reduce((acc, d) => acc + d.yesterdayRevenue, 0); // ₹1,19,500
+  // Aggregate metrics
+  const todayActualUnits = hourlyData.reduce((acc, d) => acc + d.currentUnits, 0); // 525 units
+  const yesterdayActualUnits = hourlyData.reduce((acc, d) => acc + d.previousUnits, 0); // 478 units
+  const todayRevenue = hourlyData.reduce((acc, d) => acc + d.currentRevenue, 0); // ₹1,31,250
+  const yesterdayRevenue = hourlyData.reduce((acc, d) => acc + d.previousRevenue, 0); // ₹1,19,500
   const dayOverDayGrowth = Number((((todayActualUnits - yesterdayActualUnits) / yesterdayActualUnits) * 100).toFixed(1)); // +9.8%
   const achievementPct = Math.round((todayActualUnits / dailyTarget) * 100);
   const varianceUnits = todayActualUnits - dailyTarget;
   const isAhead = varianceUnits >= 0;
-  const sevenDayPriorAvg = Math.round(weeklyComparisonData.reduce((acc, d) => acc + d.previousWeek, 0) / 7);
 
   const handleQuickReorder = (itemId: string) => {
     setReorderedItems((prev) => ({ ...prev, [itemId]: true }));
@@ -117,12 +107,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     setTimeout(() => {
       setReorderedItems((prev) => ({ ...prev, [itemId]: false }));
     }, 3500);
-  };
-
-  const handleCopyStreamlitUrl = () => {
-    const devUrl = 'https://ais-dev-iyez3lpf4rde4soqy5tpzi-717654492957.asia-east1.run.app/?mode=streamlit';
-    navigator.clipboard?.writeText(devUrl);
-    if (addToast) addToast(`Copied Streamlit web URL: ${devUrl}`, 'success');
   };
 
   const lowStockAlerts = [
@@ -153,11 +137,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
           <button
             type="button"
-            onClick={() => setShowStreamlitDeployModal(true)}
-            className="inline-flex items-center gap-1.5 bg-[#f0f2f6] hover:bg-[#e6e9ef] text-[#262730] text-sm font-semibold px-4 py-2.5 rounded-lg shadow-xs border border-[#e6e9ef] transition-all"
+            onClick={() => {
+              if (addToast) addToast('Telemetry & inventory synced with Phoenix Mall node', 'info');
+            }}
+            className="inline-flex items-center gap-1.5 bg-white text-[#1a1c1b] hover:bg-[#f4f3f1] text-sm font-semibold px-4 py-2.5 rounded-lg shadow-xs border border-[#efeeec] transition-all"
           >
-            <span className="material-symbols-outlined text-[18px] text-[#ff4b4b]">cloud_upload</span>
-            <span>Deploy to Web (Streamlit)</span>
+            <span className="material-symbols-outlined text-[18px] text-[#006947]">sync</span>
+            <span>Sync Live Telemetry</span>
           </button>
           <button
             type="button"
@@ -260,239 +246,355 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Analytics Row (8 cols + 4 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">
-        {/* Left: Sales Velocity & Line/Area Chart (8 cols) */}
-        <div className="lg:col-span-8 glass-card rounded-2xl p-5 shadow-xs hover:shadow-md transition-all duration-300 border border-[#efeeec]/90 flex flex-col justify-between">
+        {/* Left: Sales & Revenue Velocity Chart (8 cols) */}
+        <div className="lg:col-span-8 glass-card rounded-2xl p-5 shadow-xs hover:shadow-md transition-all duration-300 border border-white/60 flex flex-col justify-between">
           <div>
+            {/* Header & Interactive Selectors */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#bb0012] animate-pulse"></span>
-                  <h2 className="text-lg text-[#1a1c1b] font-bold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#bb0012] animate-pulse"></span>
+                  <h2 className="text-lg text-[#1a1c1b] font-bold tracking-tight">
                     {timeRange === 'today'
-                      ? "Today's Intraday Velocity vs Yesterday"
+                      ? "Today's Intraday Performance vs Yesterday"
                       : timeRange === '7d'
                       ? '7-Day Turnover Velocity vs Prior Week'
-                      : timeRange === '30d'
-                      ? '30-Day Revenue Velocity vs Previous Cycle'
-                      : '6-Month Trajectory vs H1 Baseline'}
+                      : '30-Day Sales Trajectory vs Previous Cycle'}
                   </h2>
                 </div>
-                <p className="text-xs text-[#5e5e65]">
+                <p className="text-xs text-[#5e5e65] mt-0.5">
                   {timeRange === 'today'
-                    ? "Hourly store turnover pacing compared to yesterday's trading curve"
+                    ? "Hourly store trading curve comparing today's volume & revenue with yesterday's baseline"
                     : timeRange === '7d'
-                    ? 'Daily sales trajectory compared with previous week same-day baseline'
-                    : timeRange === '30d'
-                    ? 'Monthly store pacing with preceding 30-day comparative run'
-                    : 'Semi-annual festive ramp-up compared to previous half-year trend'}
+                    ? "Day-by-day performance compared to the corresponding day of last week"
+                    : "Rolling monthly velocity curve compared with the preceding 30-day baseline"}
                 </p>
               </div>
-              {/* Timeframe selector */}
-              <div className="inline-flex glass-subtle p-1 rounded-xl self-start border border-[#efeeec]/80">
-                {(['today', '7d', '30d', '6m'] as const).map((t) => (
+
+              {/* View & Metric Controls */}
+              <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+                {/* Time Range Selector */}
+                <div className="inline-flex glass-subtle p-1 rounded-xl border border-[#efeeec]">
+                  {(['today', '7d', '30d'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setTimeRange(t)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                        timeRange === t
+                          ? 'bg-white text-[#bb0012] font-bold shadow-xs'
+                          : 'text-[#5e5e65] hover:text-[#1a1c1b]'
+                      }`}
+                    >
+                      {t === 'today' ? 'Today vs Yesterday' : t === '7d' ? 'Past 7 Days' : 'Past 30 Days'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Metric & Chart Mode Toggles */}
+                <div className="inline-flex glass-subtle p-1 rounded-xl border border-[#efeeec]">
                   <button
-                    key={t}
                     type="button"
-                    onClick={() => setTimeRange(t)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
-                      timeRange === t
-                        ? 'bg-white text-[#bb0012] font-bold shadow-xs'
+                    onClick={() => setMetricMode('revenue')}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      metricMode === 'revenue'
+                        ? 'bg-white text-[#1a1c1b] font-bold shadow-xs'
                         : 'text-[#5e5e65] hover:text-[#1a1c1b]'
                     }`}
+                    title="View Gross Revenue in Rupees"
                   >
-                    {t === 'today' ? "Today vs Yesterday" : t === '7d' ? '7 Days' : t === '30d' ? '30 Days' : '6 Months'}
+                    ₹ Revenue
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setMetricMode('units')}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                      metricMode === 'units'
+                        ? 'bg-white text-[#1a1c1b] font-bold shadow-xs'
+                        : 'text-[#5e5e65] hover:text-[#1a1c1b]'
+                    }`}
+                    title="View Volume in Units Sold"
+                  >
+                    Units Sold
+                  </button>
+                </div>
+
+                {/* Chart Style Toggle: Area vs Bar */}
+                <div className="inline-flex glass-subtle p-1 rounded-xl border border-[#efeeec]">
+                  <button
+                    type="button"
+                    onClick={() => setChartType('area')}
+                    className={`p-1.5 rounded-lg transition-all ${
+                      chartType === 'area'
+                        ? 'bg-white text-[#bb0012] shadow-xs'
+                        : 'text-[#5e5e65] hover:text-[#1a1c1b]'
+                    }`}
+                    title="Area Curve View"
+                  >
+                    <span className="material-symbols-outlined text-[16px] block">show_chart</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartType('bar')}
+                    className={`p-1.5 rounded-lg transition-all ${
+                      chartType === 'bar'
+                        ? 'bg-white text-[#bb0012] shadow-xs'
+                        : 'text-[#5e5e65] hover:text-[#1a1c1b]'
+                    }`}
+                    title="Grouped Bar View"
+                  >
+                    <span className="material-symbols-outlined text-[16px] block">bar_chart</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Metric Callouts Strip */}
-            <div className="grid grid-cols-3 gap-3 mb-4 glass-subtle p-3 rounded-xl border border-[#efeeec]/70">
-              <div>
-                <span className="text-xs text-[#5e5e65] block font-medium">
-                  {timeRange === 'today' ? "Peak Hourly Turn" : timeRange === '7d' ? 'Best Daily Run' : 'Peak Period Turn'}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 glass-subtle p-3.5 rounded-xl border border-[#efeeec]">
+              <div className="flex flex-col">
+                <span className="text-xs text-[#5e5e65] font-medium">
+                  {timeRange === 'today' ? "Today's Peak Turn" : timeRange === '7d' ? 'Best Daily Run' : 'Peak Period Surge'}
                 </span>
                 <span className="font-mono text-base font-bold text-[#1a1c1b]">
-                  {timeRange === 'today' ? '₹31,250' : timeRange === '7d' ? '₹1,40,000' : timeRange === '30d' ? '₹42,150' : '₹9,80,000'}
-                </span>
-                <span className="text-xs text-[#006947] block font-semibold">
-                  {timeRange === 'today' ? '08:00 PM (+5.9% vs Yest)' : timeRange === '7d' ? 'Sat Rush (+14.3% WoW)' : '+14.2% vs baseline'}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs text-[#5e5e65] block font-medium">Comparative Growth</span>
-                <span className="font-mono text-base font-bold text-[#006947]">
-                  {timeRange === 'today' ? '+9.8% DoD' : timeRange === '7d' ? '+14.2% WoW' : '+14.2% YoY'}
-                </span>
-                <span className="text-xs text-[#5e5e65] block">
-                  {timeRange === 'today' ? 'vs Yesterday (₹1,19,500)' : timeRange === '7d' ? 'vs Prior 7D (₹7,40,300)' : 'vs Prior Cycle'}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs text-[#5e5e65] block font-medium">Peak Demand Window</span>
-                <span className="font-mono text-base font-bold text-[#1a1c1b]">18:00 - 21:00</span>
-                <span className="text-xs text-[#bb0012] font-semibold block">Evening Surge Active</span>
-              </div>
-            </div>
-
-            {/* SVG Interactive Area Chart */}
-            <div className="relative w-full h-64 mt-2">
-              <svg className="w-full h-full cursor-crosshair" preserveAspectRatio="none" viewBox="0 0 760 220">
-                <defs>
-                  <linearGradient id="minisoAreaGrad" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#bb0012" stopOpacity="0.30"></stop>
-                    <stop offset="100%" stopColor="#bb0012" stopOpacity="0.00"></stop>
-                  </linearGradient>
-                  <linearGradient id="secondaryAreaGrad" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.20"></stop>
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0.00"></stop>
-                  </linearGradient>
-                </defs>
-                {/* Horizontal Grid lines */}
-                <line stroke="#efeeec" strokeWidth="1" x1="0" x2="760" y1="30" y2="30"></line>
-                <line stroke="#efeeec" strokeWidth="1" x1="0" x2="760" y1="80" y2="80"></line>
-                <line stroke="#efeeec" strokeWidth="1" x1="0" x2="760" y1="130" y2="130"></line>
-                <line stroke="#efeeec" strokeWidth="1" x1="0" x2="760" y1="180" y2="180"></line>
-
-                {/* Area 2 (Prior Cycle / Previous Day Comparison) */}
-                <path 
-                  d={timeRange === 'today'
-                    ? "M 10 180 Q 120 160 200 145 T 360 125 T 480 80 T 600 50 T 750 100 L 750 210 L 10 210 Z"
-                    : timeRange === '7d'
-                    ? "M 10 180 Q 120 165 220 170 T 360 145 T 480 110 T 600 65 T 750 85 L 750 210 L 10 210 Z"
-                    : "M 10 160 Q 90 150 160 145 T 310 130 T 460 140 T 610 120 T 750 110 L 750 210 L 10 210 Z"
-                  } 
-                  fill="url(#secondaryAreaGrad)"
-                ></path>
-                <path 
-                  d={timeRange === 'today'
-                    ? "M 10 180 Q 120 160 200 145 T 360 125 T 480 80 T 600 50 T 750 100"
-                    : timeRange === '7d'
-                    ? "M 10 180 Q 120 165 220 170 T 360 145 T 480 110 T 600 65 T 750 85"
-                    : "M 10 160 Q 90 150 160 145 T 310 130 T 460 140 T 610 120 T 750 110"
-                  } 
-                  fill="none" 
-                  stroke="#6366f1" 
-                  strokeDasharray="4 4" 
-                  strokeWidth="2"
-                ></path>
-
-                {/* Area 1 (Current Period Sales) */}
-                <path 
-                  d={timeRange === 'today'
-                    ? "M 10 170 Q 120 150 200 130 T 360 110 T 480 60 T 600 30 T 750 80 L 750 210 L 10 210 Z"
-                    : timeRange === '7d'
-                    ? "M 10 160 Q 120 140 220 150 T 360 120 T 480 80 T 600 35 T 750 50 L 750 210 L 10 210 Z"
-                    : "M 10 150 Q 80 140 140 90 T 260 110 T 380 60 T 500 120 T 620 40 T 750 55 L 750 210 L 10 210 Z"
-                  } 
-                  fill="url(#minisoAreaGrad)"
-                ></path>
-                <path 
-                  d={timeRange === 'today'
-                    ? "M 10 170 Q 120 150 200 130 T 360 110 T 480 60 T 600 30 T 750 80"
-                    : timeRange === '7d'
-                    ? "M 10 160 Q 120 140 220 150 T 360 120 T 480 80 T 600 35 T 750 50"
-                    : "M 10 150 Q 80 140 140 90 T 260 110 T 380 60 T 500 120 T 620 40 T 750 55"
-                  } 
-                  fill="none" 
-                  stroke="#bb0012" 
-                  strokeLinecap="round" 
-                  strokeWidth="3"
-                ></path>
-
-                {/* Active Interactive Data Points */}
-                <circle cx={timeRange === 'today' ? 200 : 140} cy={timeRange === 'today' ? 130 : 90} fill="#bb0012" r="4.5" className="cursor-pointer hover:scale-125 transition-transform" onClick={() => setHoveredPoint(140)}></circle>
-                <circle cx={timeRange === 'today' ? 480 : 380} cy={timeRange === 'today' ? 60 : 60} fill="#bb0012" r="4.5" className="cursor-pointer hover:scale-125 transition-transform" onClick={() => setHoveredPoint(380)}></circle>
-                <circle cx={timeRange === 'today' ? 600 : 620} cy={timeRange === 'today' ? 30 : 40} fill="#bb0012" r="6" stroke="#ffffff" strokeWidth="2.5" className="cursor-pointer animate-pulse hover:scale-125 transition-transform" onClick={() => setHoveredPoint(620)}></circle>
-              </svg>
-
-              {/* Floating Data Annotation Tooltip */}
-              {hoveredPoint === 620 && (
-                <div className="absolute left-[72%] top-[8%] -translate-x-1/2 glass-card-dark text-white p-3 rounded-xl shadow-2xl pointer-events-none flex flex-col items-start gap-1 border border-white/10 z-10 backdrop-blur-md min-w-[210px]">
-                  <span className="text-[10px] text-[#e3e2e0] uppercase tracking-wider font-semibold">
-                    {timeRange === 'today' ? '08:00 PM Intraday Surge' : timeRange === '7d' ? 'Sat Oct 23 Peak Run' : 'Oct 24 • Saturday Rush'}
+                  {timeRange === 'today' ? '₹31,250' : timeRange === '7d' ? '₹1,40,000' : '₹1,40,000'}
+                  <span className="text-xs text-[#5e5e65] font-normal ml-1.5 font-sans">
+                    ({timeRange === 'today' ? '125 units' : timeRange === '7d' ? '560 units' : '560 units'})
                   </span>
-                  <div className="flex items-center justify-between w-full font-mono text-xs">
-                    <span className="text-[#a1a1aa]">Current:</span>
-                    <span className="text-[#6ffbbe] font-bold">
-                      {timeRange === 'today' ? '₹31,250' : timeRange === '7d' ? '₹1,40,000' : '₹38,420'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between w-full font-mono text-xs">
-                    <span className="text-[#a1a1aa]">Previous:</span>
-                    <span className="text-[#cbd5e1]">
-                      {timeRange === 'today' ? '₹29,500' : timeRange === '7d' ? '₹1,22,500' : '₹31,500'}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-[#6ffbbe] font-mono border-t border-white/10 pt-1 w-full flex justify-between">
-                    <span>Performance Delta:</span>
-                    <span className="font-bold">+5.9% (+₹1,750)</span>
-                  </div>
-                </div>
-              )}
+                </span>
+                <span className="text-[11px] text-[#006947] font-semibold mt-0.5">
+                  {timeRange === 'today' ? '08:00 PM (+5.9% vs yesterday)' : timeRange === '7d' ? 'Sat Oct 23 (+14.3% WoW)' : 'Diwali Surge ramp-up'}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-[#5e5e65] font-medium">Period Growth</span>
+                <span className="font-mono text-base font-bold text-[#006947]">
+                  {timeRange === 'today' ? '+9.8% DoD' : timeRange === '7d' ? '+14.2% WoW' : '+16.5% MoM'}
+                </span>
+                <span className="text-[11px] text-[#5e5e65] mt-0.5">
+                  {timeRange === 'today'
+                    ? 'Today ₹1,31,250 vs Yesterday ₹1,19,500'
+                    : timeRange === '7d'
+                    ? 'Current 7D ₹8,45,600 vs Prior 7D ₹7,40,300'
+                    : 'vs Preceding 30-Day Period'}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-[#5e5e65] font-medium">Target Attainment</span>
+                <span className="font-mono text-base font-bold text-[#006947]">
+                  {achievementPct}%{' '}
+                  <span className="text-xs text-[#006947] font-sans font-semibold">
+                    ({isAhead ? `+${varianceUnits} surplus` : `${varianceUnits} deficit`})
+                  </span>
+                </span>
+                <span className="text-[11px] text-[#5e5e65] mt-0.5">
+                  Store Target: <strong>{dailyTarget} units/day</strong>
+                </span>
+              </div>
             </div>
 
-            {/* Axis Labels */}
-            <div className="flex justify-between text-[#5e5e65] font-mono text-xs mt-1 px-2">
-              {timeRange === 'today' ? (
-                <>
-                  <span>10:00 AM</span>
-                  <span>12:00 PM</span>
-                  <span>02:00 PM</span>
-                  <span>04:00 PM</span>
-                  <span>06:00 PM</span>
-                  <span>08:00 PM</span>
-                  <span>10:00 PM</span>
-                </>
-              ) : timeRange === '7d' ? (
-                <>
-                  <span>Mon 18</span>
-                  <span>Tue 19</span>
-                  <span>Wed 20</span>
-                  <span>Thu 21</span>
-                  <span>Fri 22</span>
-                  <span>Sat 23</span>
-                  <span>Today</span>
-                </>
-              ) : timeRange === '30d' ? (
-                <>
-                  <span>Oct 01</span>
-                  <span>Oct 07</span>
-                  <span>Oct 14</span>
-                  <span>Oct 21 (Diwali Prep)</span>
-                  <span>Oct 28</span>
-                  <span>Today</span>
-                </>
-              ) : (
-                <>
-                  <span>May</span>
-                  <span>Jun</span>
-                  <span>Jul</span>
-                  <span>Aug</span>
-                  <span>Sep</span>
-                  <span>Oct (Festive)</span>
-                </>
-              )}
+            {/* Recharts Animated Interactive Chart Container */}
+            <div className="w-full h-72 pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                {chartType === 'area' ? (
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="currentAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#bb0012" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#bb0012" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="prevAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#6366f1" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0efe9" />
+                    <XAxis
+                      dataKey="slot"
+                      tick={{ fontSize: 11, fill: '#5e5e65', fontFamily: 'monospace' }}
+                      axisLine={{ stroke: '#efeeec' }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#5e5e65', fontFamily: 'monospace' }}
+                      axisLine={{ stroke: '#efeeec' }}
+                      tickLine={false}
+                      tickFormatter={(val) => metricMode === 'revenue' ? `₹${(val / 1000).toFixed(0)}k` : `${val}u`}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          const dataObj = payload[0]?.payload;
+                          const currentVal = dataObj?.current ?? 0;
+                          const prevVal = dataObj?.previous ?? 0;
+                          const diff = currentVal - prevVal;
+                          const pct = prevVal > 0 ? ((diff / prevVal) * 100).toFixed(1) : '0';
+                          return (
+                            <div className="glass-card-dark text-white p-3 rounded-xl shadow-2xl border border-white/10 text-xs font-sans min-w-[230px] backdrop-blur-md">
+                              <div className="font-bold text-xs text-[#e3e2e0] border-b border-white/10 pb-1.5 mb-2 font-mono flex items-center justify-between">
+                                <span>{label}</span>
+                                <span className="text-[10px] text-[#6ffbbe] font-normal">
+                                  {timeRange === 'today' ? 'Today vs Yesterday' : timeRange === '7d' ? 'Week-over-Week' : '30-Day Trend'}
+                                </span>
+                              </div>
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[#a1a1aa] flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded-sm bg-[#bb0012]"></span>
+                                    {timeRange === 'today' ? "Today's Performance:" : 'Current Period:'}
+                                  </span>
+                                  <span className="font-mono font-bold text-white">
+                                    {metricMode === 'revenue' ? `₹${currentVal.toLocaleString('en-IN')}` : `${currentVal} units`}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[#a1a1aa] flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded-sm bg-[#6366f1]"></span>
+                                    {timeRange === 'today' ? "Yesterday's Baseline:" : 'Previous Baseline:'}
+                                  </span>
+                                  <span className="font-mono font-semibold text-[#cbd5e1]">
+                                    {metricMode === 'revenue' ? `₹${prevVal.toLocaleString('en-IN')}` : `${prevVal} units`}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center pt-1.5 border-t border-white/10">
+                                  <span className="text-[#a1a1aa]">Performance Delta:</span>
+                                  <span className={`font-mono font-bold ${diff >= 0 ? 'text-[#6ffbbe]' : 'text-[#ffb4ab]'}`}>
+                                    {diff >= 0 ? `+${metricMode === 'revenue' ? `₹${diff.toLocaleString('en-IN')}` : `${diff}u`} (+${pct}%)` : `${metricMode === 'revenue' ? `₹${diff.toLocaleString('en-IN')}` : `${diff}u`} (${pct}%)`}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] text-[#94a3b8] pt-0.5">
+                                  <span>Units sold:</span>
+                                  <span className="font-mono text-white">{dataObj.currentUnits}u (vs {dataObj.previousUnits}u prev)</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: 8, fontSize: 11 }} />
+                    <Area
+                      type="monotone"
+                      dataKey="current"
+                      name={timeRange === 'today' ? "Today's Sales" : 'Current Period'}
+                      stroke="#bb0012"
+                      strokeWidth={2.5}
+                      fill="url(#currentAreaGrad)"
+                      animationDuration={600}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="previous"
+                      name={timeRange === 'today' ? "Yesterday's Sales" : 'Previous Cycle'}
+                      stroke="#6366f1"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      fill="url(#prevAreaGrad)"
+                      animationDuration={600}
+                    />
+                  </AreaChart>
+                ) : (
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barGap={4}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0efe9" />
+                    <XAxis
+                      dataKey="slot"
+                      tick={{ fontSize: 11, fill: '#5e5e65', fontFamily: 'monospace' }}
+                      axisLine={{ stroke: '#efeeec' }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#5e5e65', fontFamily: 'monospace' }}
+                      axisLine={{ stroke: '#efeeec' }}
+                      tickLine={false}
+                      tickFormatter={(val) => metricMode === 'revenue' ? `₹${(val / 1000).toFixed(0)}k` : `${val}u`}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (active && payload && payload.length) {
+                          const dataObj = payload[0]?.payload;
+                          const currentVal = dataObj?.current ?? 0;
+                          const prevVal = dataObj?.previous ?? 0;
+                          const diff = currentVal - prevVal;
+                          const pct = prevVal > 0 ? ((diff / prevVal) * 100).toFixed(1) : '0';
+                          return (
+                            <div className="glass-card-dark text-white p-3 rounded-xl shadow-2xl border border-white/10 text-xs font-sans min-w-[230px] backdrop-blur-md">
+                              <div className="font-bold text-xs text-[#e3e2e0] border-b border-white/10 pb-1.5 mb-2 font-mono flex items-center justify-between">
+                                <span>{label}</span>
+                                <span className="text-[10px] text-[#6ffbbe] font-normal">Bar Comparison</span>
+                              </div>
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[#a1a1aa] flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded-sm bg-[#bb0012]"></span>
+                                    {timeRange === 'today' ? "Today:" : 'Current:'}
+                                  </span>
+                                  <span className="font-mono font-bold text-white">
+                                    {metricMode === 'revenue' ? `₹${currentVal.toLocaleString('en-IN')}` : `${currentVal} units`}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[#a1a1aa] flex items-center gap-1.5">
+                                    <span className="w-2.5 h-2.5 rounded-sm bg-[#6366f1]"></span>
+                                    {timeRange === 'today' ? "Yesterday:" : 'Previous:'}
+                                  </span>
+                                  <span className="font-mono font-semibold text-[#cbd5e1]">
+                                    {metricMode === 'revenue' ? `₹${prevVal.toLocaleString('en-IN')}` : `${prevVal} units`}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center pt-1.5 border-t border-white/10">
+                                  <span className="text-[#a1a1aa]">Growth Delta:</span>
+                                  <span className={`font-mono font-bold ${diff >= 0 ? 'text-[#6ffbbe]' : 'text-[#ffb4ab]'}`}>
+                                    {diff >= 0 ? `+${diff.toLocaleString('en-IN')} (+${pct}%)` : `${diff.toLocaleString('en-IN')} (${pct}%)`}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Legend verticalAlign="top" align="right" wrapperStyle={{ paddingBottom: 8, fontSize: 11 }} />
+                    <Bar
+                      dataKey="current"
+                      name={timeRange === 'today' ? "Today's Sales" : 'Current Period'}
+                      fill="#bb0012"
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={28}
+                      animationDuration={600}
+                    />
+                    <Bar
+                      dataKey="previous"
+                      name={timeRange === 'today' ? "Yesterday's Baseline" : 'Previous Cycle'}
+                      fill="#6366f1"
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={28}
+                      animationDuration={600}
+                    />
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-3 mt-3 glass-subtle px-4 py-2.5 rounded-xl border border-[#efeeec]/70">
+          {/* Footer Bar */}
+          <div className="flex items-center justify-between pt-3 mt-3 glass-subtle px-4 py-2.5 rounded-xl border border-[#efeeec]">
             <div className="flex items-center gap-4 text-xs font-medium flex-wrap">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-1 bg-[#bb0012] rounded-full"></span>
                 <span className="text-[#1a1c1b]">
-                  {timeRange === 'today' ? 'Today (₹1,31,250)' : timeRange === '7d' ? 'Current 7 Days (₹8,45,600)' : 'Current Cycle (₹8,45,600)'}
+                  {timeRange === 'today' ? `Today (₹${todayRevenue.toLocaleString('en-IN')})` : `Current 7 Days (₹8,45,600)`}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-1 bg-[#6366f1] rounded-full"></span>
                 <span className="text-[#5e5e65]">
-                  {timeRange === 'today' ? 'Yesterday (₹1,19,500)' : timeRange === '7d' ? 'Prior 7 Days (₹7,40,300)' : 'Previous 30 Days'}
+                  {timeRange === 'today' ? `Yesterday (₹${yesterdayRevenue.toLocaleString('en-IN')})` : `Prior 7 Days (₹7,40,300)`}
                 </span>
               </div>
             </div>
             <span className="font-mono text-xs text-[#006947] font-bold">
-              Java ML Engine: ARIMA Trend Fit 96.4%
+              ARIMA(2,1,2) Pacing Confidence: 96.4%
             </span>
           </div>
         </div>
@@ -561,324 +663,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>View AI Allocation Plan</span>
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Recharts Daily Sales Volume vs Store Target Bar Chart (with Previous Days Data) */}
-      <div className="glass-card rounded-2xl shadow-sm border border-[#efeeec]/90 p-5 mb-6 flex flex-col gap-4">
-        {/* Card Header & Controls */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#f4f3f1] pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#ffdad6]/70 text-[#bb0012] flex items-center justify-center shrink-0 shadow-xs">
-              <span className="material-symbols-outlined text-[24px]">bar_chart</span>
-            </div>
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base lg:text-lg font-bold text-[#1a1c1b] tracking-tight">
-                  Daily Sales Volume vs Store Daily Target
-                </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#6ffbbe]/40 text-[#002113] uppercase tracking-wider flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#006947] animate-pulse"></span>
-                  Pacing Ahead ({achievementPct}%)
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#f4f3f1] text-[#6366f1]">
-                  +{dayOverDayGrowth}% vs Yesterday
-                </span>
-              </div>
-              <p className="text-xs text-[#5e5e65]">
-                Multi-day and intraday comparison giving managers a clear snapshot of current performance against Store #104 daily target of {dailyTarget} units and previous days' data
-              </p>
-            </div>
-          </div>
-
-          {/* Controls: Time slice selector & Target Calibration */}
-          <div className="flex items-center gap-2 self-start lg:self-auto flex-wrap">
-            <div className="flex items-center gap-1 glass-subtle p-1 rounded-xl border border-[#efeeec]/80 text-xs">
-              <button
-                type="button"
-                onClick={() => setChartViewMode('today-vs-yesterday')}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
-                  chartViewMode === 'today-vs-yesterday'
-                    ? 'bg-white text-[#bb0012] shadow-xs'
-                    : 'text-[#5e5e65] hover:text-[#1a1c1b]'
-                }`}
-              >
-                Today vs Yesterday (Hourly)
-              </button>
-              <button
-                type="button"
-                onClick={() => setChartViewMode('7days')}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
-                  chartViewMode === '7days'
-                    ? 'bg-white text-[#bb0012] shadow-xs'
-                    : 'text-[#5e5e65] hover:text-[#1a1c1b]'
-                }`}
-              >
-                Past 7 Days (vs Prior Week)
-              </button>
-              <button
-                type="button"
-                onClick={() => setChartViewMode('14days')}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
-                  chartViewMode === '14days'
-                    ? 'bg-white text-[#bb0012] shadow-xs'
-                    : 'text-[#5e5e65] hover:text-[#1a1c1b]'
-                }`}
-              >
-                Past 14 Days
-              </button>
-            </div>
-
-            <div className="flex items-center gap-1.5 glass-subtle px-2.5 py-1.5 rounded-xl border border-[#efeeec]/80 text-xs">
-              <span className="text-[#5e5e65] font-medium">Daily Target:</span>
-              <select
-                value={dailyTarget}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setDailyTarget(val);
-                  if (addToast) addToast(`Store target adjusted to ${val} units/day`, 'info');
-                }}
-                className="bg-white border border-[#efeeec] rounded px-2 py-0.5 text-xs font-mono font-bold text-[#1a1c1b] outline-none cursor-pointer"
-              >
-                <option value={380}>380 units</option>
-                <option value={420}>420 units (Standard)</option>
-                <option value={450}>450 units</option>
-                <option value={500}>500 units (Festive)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Manager Summary Quick Strip (Today vs Previous Days vs Target) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 glass-subtle p-3 rounded-xl border border-[#efeeec]/70">
-          <div className="flex flex-col">
-            <span className="text-[11px] text-[#5e5e65]">Today's Target Volume</span>
-            <span className="text-lg font-bold font-mono text-[#1a1c1b]">
-              {dailyTarget} <span className="text-xs font-normal text-[#5e5e65]">units</span>
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[11px] text-[#5e5e65]">Actual Sold Today</span>
-            <span className="text-lg font-bold font-mono text-[#bb0012]">
-              {todayActualUnits} <span className="text-xs font-normal text-[#5e5e65]">units</span>
-            </span>
-            <span className="text-[11px] text-[#5e5e65] font-mono">₹{todayRevenue.toLocaleString('en-IN')}</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[11px] text-[#5e5e65]">Yesterday's Sold Volume</span>
-            <span className="text-lg font-bold font-mono text-[#6366f1]">
-              {yesterdayActualUnits} <span className="text-xs font-normal text-[#5e5e65]">units</span>
-            </span>
-            <span className="text-[11px] text-[#006947] font-semibold">
-              +{dayOverDayGrowth}% Day-over-Day
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[11px] text-[#5e5e65]">Target Attainment</span>
-            <span className="text-lg font-bold font-mono text-[#006947]">
-              {achievementPct}%{' '}
-              <span className="text-xs font-normal text-[#006947] font-sans">
-                ({isAhead ? `+${varianceUnits} surplus` : `${varianceUnits} deficit`})
-              </span>
-            </span>
-            <span className="text-[11px] text-[#5e5e65]">7-Day Baseline: ~{sevenDayPriorAvg}u/d</span>
-          </div>
-        </div>
-
-        {/* Recharts BarChart Container */}
-        <div className="w-full h-72 pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={currentChartData}
-              margin={{ top: 12, right: 10, left: -10, bottom: 0 }}
-              barGap={4}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0efe9" />
-              <XAxis 
-                dataKey="slot" 
-                tick={{ fontSize: 11, fill: '#5e5e65', fontFamily: 'monospace' }}
-                axisLine={{ stroke: '#efeeec' }}
-                tickLine={false}
-              />
-              <YAxis 
-                tick={{ fontSize: 11, fill: '#5e5e65', fontFamily: 'monospace' }}
-                axisLine={{ stroke: '#efeeec' }}
-                tickLine={false}
-                unit=" u"
-              />
-              <Tooltip
-                content={({ active, payload, label }) => {
-                  if (active && payload && payload.length) {
-                    const dataObj = payload[0]?.payload;
-                    const todayVal = dataObj?.today ?? dataObj?.actual ?? 0;
-                    const prevVal = dataObj?.yesterday ?? dataObj?.previousWeek ?? dataObj?.previousPeriod ?? 0;
-                    const targetVal = dataObj?.target ?? 0;
-                    const dodDiff = todayVal - prevVal;
-                    const dodPct = prevVal > 0 ? ((dodDiff / prevVal) * 100).toFixed(1) : '0';
-
-                    return (
-                      <div className="glass-card-dark text-white p-3.5 rounded-xl shadow-2xl border border-white/10 text-xs font-sans min-w-[240px] backdrop-blur-md">
-                        <div className="font-bold text-xs text-[#e3e2e0] border-b border-white/10 pb-1.5 mb-2 font-mono flex items-center justify-between">
-                          <span>{label}</span>
-                          <span className="text-[10px] text-[#6ffbbe] font-normal">
-                            {chartViewMode === 'today-vs-yesterday' 
-                              ? 'Today vs Yesterday' 
-                              : chartViewMode === '7days' 
-                              ? 'Week-over-Week' 
-                              : '14-Day Trajectory'}
-                          </span>
-                        </div>
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[#a1a1aa] flex items-center gap-1.5">
-                              <span className="w-2.5 h-2.5 rounded-sm bg-[#bb0012]"></span>
-                              {chartViewMode === 'today-vs-yesterday' ? "Today's Volume:" : "Current Day Volume:"}
-                            </span>
-                            <span className="font-mono font-bold text-white">{todayVal} units</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-[#a1a1aa] flex items-center gap-1.5">
-                              <span className="w-2.5 h-2.5 rounded-sm bg-[#6366f1]"></span>
-                              {chartViewMode === 'today-vs-yesterday' 
-                                ? "Yesterday's Volume:" 
-                                : chartViewMode === '7days' 
-                                ? "Prior Week Same Day:" 
-                                : "Prior Period Baseline:"}
-                            </span>
-                            <span className="font-mono font-semibold text-[#cbd5e1]">{prevVal} units</span>
-                          </div>
-                          {targetVal > 0 && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-[#a1a1aa] flex items-center gap-1.5">
-                                <span className="w-2.5 h-2.5 rounded-sm bg-[#cbd5e1]"></span>
-                                Pacing Benchmark:
-                              </span>
-                              <span className="font-mono text-[#cbd5e1]">{targetVal} units</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between items-center pt-1.5 border-t border-white/10">
-                            <span className="text-[#a1a1aa]">Comparative Delta:</span>
-                            <span className={`font-mono font-bold ${dodDiff >= 0 ? 'text-[#6ffbbe]' : 'text-[#ffb4ab]'}`}>
-                              {dodDiff >= 0 ? `+${dodDiff}u (+${dodPct}%)` : `${dodDiff}u (${dodPct}%)`}
-                            </span>
-                          </div>
-                          {dataObj?.todayRevenue && (
-                            <div className="flex justify-between items-center text-[11px] text-[#a1a1aa] pt-0.5">
-                              <span>Today's Slot Revenue:</span>
-                              <span className="font-mono text-white">₹{dataObj.todayRevenue.toLocaleString('en-IN')}</span>
-                            </div>
-                          )}
-                          {dataObj?.yesterdayRevenue && (
-                            <div className="flex justify-between items-center text-[10px] text-[#94a3b8]">
-                              <span>Yesterday's Slot Revenue:</span>
-                              <span className="font-mono text-[#cbd5e1]">₹{dataObj.yesterdayRevenue.toLocaleString('en-IN')}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Legend 
-                verticalAlign="top"
-                align="right"
-                wrapperStyle={{ paddingBottom: 8, fontSize: 11 }}
-                iconType="rect"
-              />
-              <ReferenceLine 
-                y={chartViewMode === 'today-vs-yesterday' ? Math.round(dailyTarget / 7) : dailyTarget} 
-                stroke="#d97706" 
-                strokeDasharray="4 4"
-                label={{ 
-                  value: chartViewMode === 'today-vs-yesterday' ? `Avg Target Slot (${Math.round(dailyTarget/7)}u)` : `Daily Target (${dailyTarget}u)`, 
-                  fill: '#b45309', 
-                  fontSize: 10,
-                  position: 'insideTopRight'
-                }} 
-              />
-              {chartViewMode === 'today-vs-yesterday' ? (
-                <>
-                  <Bar 
-                    dataKey="today" 
-                    name="Today's Actual Volume (Units)" 
-                    fill="#bb0012" 
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={30}
-                  />
-                  <Bar 
-                    dataKey="yesterday" 
-                    name="Yesterday's Volume (Units)" 
-                    fill="#6366f1" 
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={30}
-                  />
-                  <Bar 
-                    dataKey="target" 
-                    name="Target Benchmark (Units)" 
-                    fill="#cbd5e1" 
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={30}
-                  />
-                </>
-              ) : chartViewMode === '7days' ? (
-                <>
-                  <Bar 
-                    dataKey="actual" 
-                    name="Current Week Volume (Units)" 
-                    fill="#bb0012" 
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={30}
-                  />
-                  <Bar 
-                    dataKey="previousWeek" 
-                    name="Prior Week Same Day (Units)" 
-                    fill="#6366f1" 
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={30}
-                  />
-                  <Bar 
-                    dataKey="target" 
-                    name="Daily Target Benchmark (Units)" 
-                    fill="#cbd5e1" 
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={30}
-                  />
-                </>
-              ) : (
-                <>
-                  <Bar 
-                    dataKey="actual" 
-                    name="Daily Sold Volume (Units)" 
-                    fill="#bb0012" 
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={16}
-                  />
-                  <Bar 
-                    dataKey="previousPeriod" 
-                    name="Prior Period Baseline (Units)" 
-                    fill="#6366f1" 
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={16}
-                  />
-                </>
-              )}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Manager Insights Footer */}
-        <div className="p-3.5 glass-subtle rounded-xl flex flex-col sm:flex-row items-center justify-between text-xs text-[#5e5e65] gap-2 border border-[#efeeec]/70">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px] text-[#006947]">verified</span>
-            <span>
-              <strong>Manager Performance Snapshot:</strong> Peak hourly sales volume peaked at <strong>08:00 PM (125 units)</strong> vs yesterday's <strong>118 units</strong> (+5.9% DoD). Today's total of <strong>{todayActualUnits} units</strong> is pacing <strong>+{varianceUnits} units (+{achievementPct}%) ahead</strong> of the store daily {dailyTarget}-unit target.
-            </span>
-          </div>
-          <span className="font-mono text-[11px] text-[#006947] shrink-0 font-bold bg-[#6ffbbe]/30 px-3 py-1 rounded-full border border-[#006947]/20">
-            Status: Target Exceeded (+{varianceUnits}u) ✓
-          </span>
         </div>
       </div>
 
@@ -1181,118 +965,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="px-4 py-2 rounded-lg bg-[#bb0012] hover:bg-[#e7151f] text-white text-xs font-semibold shadow-sm"
               >
                 Go to Reorder &amp; Dispatch PO
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* STREAMLIT CLOUD DEPLOYMENT MODAL */}
-      {showStreamlitDeployModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl p-6 border border-[#efeeec] flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-[#efeeec] pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-lg bg-[#ff4b4b]/10 text-[#ff4b4b] flex items-center justify-center font-bold text-sm">
-                  st
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-[#1a1c1b]">Deploy MINISO OS to the Web using Streamlit</h3>
-                  <span className="text-xs text-[#5e5e65]">Turnkey deployment instructions for Streamlit Community Cloud</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowStreamlitDeployModal(false)}
-                className="p-1 rounded hover:bg-[#f4f3f1] text-[#5e5e65]"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-
-            {/* URL Explanation Banner */}
-            <div className="p-3.5 bg-[#fef2f2] border border-[#fecaca] rounded-xl text-xs flex flex-col gap-1.5 text-[#991b1b]">
-              <div className="flex items-center gap-1.5 font-bold">
-                <span className="material-symbols-outlined text-[18px]">info</span>
-                <span>Why did the previous link show "404 Page not found"?</span>
-              </div>
-              <p className="leading-relaxed text-[#7f1d1d]">
-                The URL with <code className="bg-white/80 px-1 py-0.5 rounded font-mono text-[11px]">ais-pre-...</code> is the pre-release container that only serves after explicit publishing. The active live working server running your application is the <strong>Development App URL</strong>:
-              </p>
-              <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-[#fecaca] font-mono text-[11px] text-[#1a1c1b] break-all">
-                <span>https://ais-dev-iyez3lpf4rde4soqy5tpzi-717654492957.asia-east1.run.app/?mode=streamlit</span>
-                <button
-                  type="button"
-                  onClick={handleCopyStreamlitUrl}
-                  className="ml-2 px-2.5 py-1 bg-[#ff4b4b] text-white rounded font-sans font-semibold text-[10px] shrink-0"
-                >
-                  Copy URL
-                </button>
-              </div>
-            </div>
-
-            {/* Deployment Steps to Streamlit Cloud */}
-            <div className="space-y-3 text-xs">
-              <h4 className="font-bold text-[#1a1c1b] text-sm">How to Deploy to Streamlit Community Cloud (Free):</h4>
-              
-              <div className="p-3 bg-[#faf9f7] rounded-xl border border-[#efeeec] flex flex-col gap-1">
-                <div className="font-bold text-[#1a1c1b]">Step 1: Download Deployment Files</div>
-                <p className="text-[#5e5e65]">All files needed (<code className="font-mono">streamlit_app.py</code>, <code className="font-mono">requirements.txt</code>, <code className="font-mono">.streamlit/config.toml</code>) are ready in this repository:</p>
-                <div className="flex items-center gap-2 pt-1 flex-wrap">
-                  <a
-                    href="/api/streamlit/download"
-                    download="streamlit_app.py"
-                    className="px-3 py-1.5 bg-white border border-[#efeeec] rounded-lg font-semibold text-[#1a1c1b] hover:bg-[#f4f3f1] flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">download</span>
-                    Download streamlit_app.py
-                  </a>
-                  <a
-                    href="/requirements.txt"
-                    download="requirements.txt"
-                    className="px-3 py-1.5 bg-white border border-[#efeeec] rounded-lg font-semibold text-[#1a1c1b] hover:bg-[#f4f3f1] flex items-center gap-1"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">download</span>
-                    Download requirements.txt
-                  </a>
-                </div>
-              </div>
-
-              <div className="p-3 bg-[#faf9f7] rounded-xl border border-[#efeeec] flex flex-col gap-1">
-                <div className="font-bold text-[#1a1c1b]">Step 2: Push to a GitHub Repository</div>
-                <p className="text-[#5e5e65]">Create a repository on GitHub (e.g. <code className="font-mono">miniso-retail-streamlit</code>) and push the files:</p>
-                <pre className="bg-[#1a1c1b] text-[#6ffbbe] p-2 rounded-lg font-mono text-[11px] overflow-x-auto">
-git init && git add . && git commit -m "MINISO Streamlit App"
-git remote add origin https://github.com/YOUR_USERNAME/miniso-retail-streamlit.git
-git push -u origin main
-                </pre>
-              </div>
-
-              <div className="p-3 bg-[#faf9f7] rounded-xl border border-[#efeeec] flex flex-col gap-1">
-                <div className="font-bold text-[#1a1c1b]">Step 3: Deploy on Streamlit Cloud</div>
-                <p className="text-[#5e5e65]">
-                  Go to <a href="https://share.streamlit.io" target="_blank" rel="noreferrer" className="text-[#ff4b4b] underline font-semibold">share.streamlit.io</a>, log in with GitHub, click <strong>"New app"</strong>, select your repository and branch, specify <code className="font-mono">streamlit_app.py</code> as Main file path, and click <strong>"Deploy"</strong>!
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-[#efeeec]">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowStreamlitDeployModal(false);
-                  if (onOpenStreamlit) onOpenStreamlit();
-                }}
-                className="px-4 py-2 rounded-lg bg-[#f0f2f6] text-[#262730] text-xs font-semibold hover:bg-[#e6e9ef]"
-              >
-                Open Streamlit Mode Now
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowStreamlitDeployModal(false)}
-                className="px-4 py-2 rounded-lg bg-[#bb0012] text-white text-xs font-semibold hover:bg-[#e7151f]"
-              >
-                Done
               </button>
             </div>
           </div>

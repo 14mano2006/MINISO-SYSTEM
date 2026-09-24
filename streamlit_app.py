@@ -10,6 +10,18 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
+try:
+    import plotly.graph_objects as go
+    HAS_PLOTLY = True
+except ImportError:
+    HAS_PLOTLY = False
+
+try:
+    import altair as alt
+    HAS_ALTAIR = True
+except ImportError:
+    HAS_ALTAIR = False
+
 # Page configuration
 st.set_page_config(
     page_title="MINISO Retail OS — Streamlit Platform",
@@ -108,7 +120,17 @@ def load_miniso_sales_data():
 df = load_miniso_sales_data()
 
 # Sidebar Navigation & Controls
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Miniso_logo.svg/320px-Miniso_logo.svg.png", width=120)
+st.sidebar.markdown("""
+<div style="display: flex; align-items: center; gap: 12px; padding: 4px 0 12px 0; border-bottom: 1px solid #e6e9ef; margin-bottom: 12px;">
+    <div style="background: #bb0012; color: #ffffff; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 22px; font-family: sans-serif; box-shadow: 0 4px 10px rgba(187,0,18,0.3); flex-shrink: 0;">
+        M
+    </div>
+    <div style="display: flex; flex-direction: column;">
+        <span style="font-weight: 800; font-size: 19px; color: #1a1c1b; line-height: 1.1; letter-spacing: -0.5px;">MINISO</span>
+        <span style="font-size: 10px; font-weight: 700; color: #bb0012; letter-spacing: 1.5px; text-transform: uppercase;">Smart Retail OS</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 st.sidebar.markdown("### 🏬 Phoenix Mall Store #104")
 st.sidebar.markdown("**Terminal**: `MIN-REG-02` | **Engine**: `ARIMA-Hybrid`")
 
@@ -148,35 +170,177 @@ if page == "📊 Retail Overview & Sales KPIs":
     
     # Daily Sales Volume Bar Chart vs Store Target
     st.subheader("🎯 Daily Sales Volume vs Store Daily Target (Manager Snapshot)")
-    st.caption("Intraday and 7-day sales volume performance comparison against Store #104 daily target.")
+    st.caption("Intraday and multi-day sales volume performance comparison against Store #104 daily target and previous days' data.")
     
-    chart_col1, chart_col2 = st.columns([3, 1])
-    with chart_col2:
+    control_col1, control_col2 = st.columns([3, 1])
+    with control_col2:
         daily_target_val = st.number_input("Store Daily Target (Units)", min_value=200, max_value=800, value=420, step=20)
-        view_mode = st.radio("Time Slice", ["Today's Hourly Slots", "Past 7 Days"], horizontal=True)
+        view_mode = st.radio("Time Slice", ["Today vs Yesterday (Hourly)", "Past 7 Days (vs Prior Week)", "Past 14 Days"], index=0)
     
-    if view_mode == "Today's Hourly Slots":
+    if view_mode == "Today vs Yesterday (Hourly)":
+        ordered_slots = ['10:00 AM', '12:00 PM', '02:00 PM', '04:00 PM', '06:00 PM', '08:00 PM', '10:00 PM']
         hourly_df = pd.DataFrame([
-            {'Slot': '10:00 AM', 'Actual Volume': 28, 'Target Benchmark': int(daily_target_val * 0.05)},
-            {'Slot': '12:00 PM', 'Actual Volume': 52, 'Target Benchmark': int(daily_target_val * 0.10)},
-            {'Slot': '02:00 PM', 'Actual Volume': 64, 'Target Benchmark': int(daily_target_val * 0.12)},
-            {'Slot': '04:00 PM', 'Actual Volume': 78, 'Target Benchmark': int(daily_target_val * 0.15)},
-            {'Slot': '06:00 PM', 'Actual Volume': 108, 'Target Benchmark': int(daily_target_val * 0.22)},
-            {'Slot': '08:00 PM', 'Actual Volume': 125, 'Target Benchmark': int(daily_target_val * 0.24)},
-            {'Slot': '10:00 PM', 'Actual Volume': 70, 'Target Benchmark': int(daily_target_val * 0.12)},
+            {'Slot': '10:00 AM', 'Today Actual': 28, 'Yesterday': 24, 'Target Benchmark': int(daily_target_val * 0.05), 'Today Rev': 7000, 'Yest Rev': 6000},
+            {'Slot': '12:00 PM', 'Today Actual': 52, 'Yesterday': 46, 'Target Benchmark': int(daily_target_val * 0.10), 'Today Rev': 13000, 'Yest Rev': 11500},
+            {'Slot': '02:00 PM', 'Today Actual': 64, 'Yesterday': 58, 'Target Benchmark': int(daily_target_val * 0.12), 'Today Rev': 16000, 'Yest Rev': 14500},
+            {'Slot': '04:00 PM', 'Today Actual': 78, 'Yesterday': 72, 'Target Benchmark': int(daily_target_val * 0.15), 'Today Rev': 19500, 'Yest Rev': 18000},
+            {'Slot': '06:00 PM', 'Today Actual': 108, 'Yesterday': 95, 'Target Benchmark': int(daily_target_val * 0.22), 'Today Rev': 27000, 'Yest Rev': 23750},
+            {'Slot': '08:00 PM', 'Today Actual': 125, 'Yesterday': 118, 'Target Benchmark': int(daily_target_val * 0.24), 'Today Rev': 31250, 'Yest Rev': 29500},
+            {'Slot': '10:00 PM', 'Today Actual': 70, 'Yesterday': 65, 'Target Benchmark': int(daily_target_val * 0.12), 'Today Rev': 17500, 'Yest Rev': 16250},
         ])
-        with chart_col1:
-            st.bar_chart(hourly_df.set_index('Slot')[['Actual Volume', 'Target Benchmark']], color=["#bb0012", "#cbd5e1"])
         
-        tot_today = hourly_df['Actual Volume'].sum()
+        tot_today = int(hourly_df['Today Actual'].sum())
+        tot_yesterday = int(hourly_df['Yesterday'].sum())
+        tot_revenue = int(hourly_df['Today Rev'].sum())
         variance = tot_today - daily_target_val
         attainment = round((tot_today / daily_target_val) * 100, 1)
-        st.success(f"**Intraday Status**: Today's Actual: **{tot_today} units** vs Target: **{daily_target_val} units** ({attainment}% Attainment, **+{variance} surplus**). Daily target exceeded!")
+        dod_growth = round(((tot_today - tot_yesterday) / tot_yesterday) * 100, 1)
+        
+        # Summary KPI Cards
+        kpi_c1, kpi_c2, kpi_c3, kpi_c4 = control_col1.columns(4)
+        kpi_c1.metric("Today's Target", f"{daily_target_val} units")
+        kpi_c2.metric("Actual Sold Today", f"{tot_today} units", f"₹{tot_revenue:,.0f}")
+        kpi_c3.metric("Yesterday's Sold", f"{tot_yesterday} units", f"+{dod_growth}% DoD")
+        kpi_c4.metric("Target Attainment", f"{attainment}%", f"+{variance} surplus")
+        
+        if HAS_PLOTLY:
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=hourly_df['Slot'],
+                y=hourly_df['Today Actual'],
+                name="Today's Actual Volume",
+                marker_color="#bb0012",
+                hovertemplate="<b>%{x}</b><br>Today: %{y} units<extra></extra>"
+            ))
+            fig.add_trace(go.Bar(
+                x=hourly_df['Slot'],
+                y=hourly_df['Yesterday'],
+                name="Yesterday's Volume",
+                marker_color="#6366f1",
+                hovertemplate="<b>%{x}</b><br>Yesterday: %{y} units<extra></extra>"
+            ))
+            fig.add_trace(go.Bar(
+                x=hourly_df['Slot'],
+                y=hourly_df['Target Benchmark'],
+                name="Slot Target Benchmark",
+                marker_color="#cbd5e1",
+                hovertemplate="<b>%{x}</b><br>Target: %{y} units<extra></extra>"
+            ))
+            fig.update_layout(
+                barmode='group',
+                bargap=0.22,
+                bargroupgap=0.08,
+                margin=dict(l=10, r=10, t=25, b=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                xaxis=dict(
+                    type='category',
+                    categoryorder='array',
+                    categoryarray=ordered_slots,
+                    tickfont=dict(size=11, family='monospace')
+                ),
+                yaxis=dict(
+                    rangemode='tozero',
+                    title="Sold Units",
+                    gridcolor="#f0efe9",
+                    tickfont=dict(size=11, family='monospace')
+                ),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                height=350
+            )
+            control_col1.plotly_chart(fig, use_container_width=True)
+        else:
+            hourly_df['Slot'] = pd.Categorical(hourly_df['Slot'], categories=ordered_slots, ordered=True)
+            hourly_df = hourly_df.sort_values('Slot')
+            control_col1.bar_chart(
+                hourly_df.set_index('Slot')[['Today Actual', 'Yesterday', 'Target Benchmark']],
+                color=["#bb0012", "#6366f1", "#cbd5e1"]
+            )
+            
+        st.success(f"**Performance Snapshot**: Today's Actual: **{tot_today} units** vs Yesterday: **{tot_yesterday} units** (+{dod_growth}% DoD) vs Target: **{daily_target_val} units** ({attainment}% Attainment, **+{variance} units surplus**). Intraday target achieved!")
+        
+    elif view_mode == "Past 7 Days (vs Prior Week)":
+        past_7_df = pd.DataFrame([
+            {'Date': 'Mon Oct 18', 'Current Week': 380, 'Prior Week Same Day': 340, 'Target Benchmark': daily_target_val},
+            {'Date': 'Tue Oct 19', 'Current Week': 410, 'Prior Week Same Day': 365, 'Target Benchmark': daily_target_val},
+            {'Date': 'Wed Oct 20', 'Current Week': 395, 'Prior Week Same Day': 350, 'Target Benchmark': daily_target_val},
+            {'Date': 'Thu Oct 21', 'Current Week': 435, 'Prior Week Same Day': 380, 'Target Benchmark': daily_target_val},
+            {'Date': 'Fri Oct 22', 'Current Week': 485, 'Prior Week Same Day': 420, 'Target Benchmark': daily_target_val},
+            {'Date': 'Sat Oct 23', 'Current Week': 560, 'Prior Week Same Day': 490, 'Target Benchmark': int(daily_target_val * 1.15)},
+            {'Date': 'Sun Oct 24 (Today)', 'Current Week': 525, 'Prior Week Same Day': 460, 'Target Benchmark': daily_target_val},
+        ])
+        
+        c_tot = int(past_7_df['Current Week'].sum())
+        p_tot = int(past_7_df['Prior Week Same Day'].sum())
+        wow_growth = round(((c_tot - p_tot) / p_tot) * 100, 1)
+        
+        kpi_c1, kpi_c2, kpi_c3, kpi_c4 = control_col1.columns(4)
+        kpi_c1.metric("7-Day Target Total", f"{daily_target_val * 7} units")
+        kpi_c2.metric("7-Day Sold Volume", f"{c_tot:,} units", "+14.2% YoY")
+        kpi_c3.metric("Prior Week Baseline", f"{p_tot:,} units", f"+{wow_growth}% WoW")
+        kpi_c4.metric("Average Daily Run", f"{int(c_tot / 7)} units/day", "Ahead")
+        
+        if HAS_PLOTLY:
+            fig = go.Figure()
+            fig.add_trace(go.Bar(x=past_7_df['Date'], y=past_7_df['Current Week'], name="Current Week Units", marker_color="#bb0012"))
+            fig.add_trace(go.Bar(x=past_7_df['Date'], y=past_7_df['Prior Week Same Day'], name="Prior Week Same Day", marker_color="#6366f1"))
+            fig.add_trace(go.Bar(x=past_7_df['Date'], y=past_7_df['Target Benchmark'], name="Daily Target Benchmark", marker_color="#cbd5e1"))
+            fig.update_layout(
+                barmode='group',
+                bargap=0.22,
+                bargroupgap=0.08,
+                margin=dict(l=10, r=10, t=25, b=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                yaxis=dict(rangemode='tozero', title="Units Sold", gridcolor="#f0efe9"),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                height=350
+            )
+            control_col1.plotly_chart(fig, use_container_width=True)
+        else:
+            control_col1.bar_chart(
+                past_7_df.set_index('Date')[['Current Week', 'Prior Week Same Day', 'Target Benchmark']],
+                color=["#bb0012", "#6366f1", "#cbd5e1"]
+            )
     else:
-        past_7_df = df.tail(7).copy()
-        past_7_df['Target Benchmark'] = daily_target_val
-        with chart_col1:
-            st.bar_chart(past_7_df.set_index('Date')[['UnitsSold', 'Target Benchmark']], color=["#bb0012", "#cbd5e1"])
+        # Past 14 Days Chronological
+        past_14_dates = ['Oct 11', 'Oct 12', 'Oct 13', 'Oct 14', 'Oct 15', 'Oct 16', 'Oct 17', 'Oct 18', 'Oct 19', 'Oct 20', 'Oct 21', 'Oct 22', 'Oct 23', 'Oct 24 (Today)']
+        actuals = [355, 368, 342, 385, 420, 495, 465, 380, 410, 395, 435, 485, 560, 525]
+        priors = [320, 335, 310, 345, 375, 440, 415, 340, 365, 350, 380, 420, 490, 460]
+        
+        past_14_df = pd.DataFrame({
+            'Date': past_14_dates,
+            'Daily Units': actuals,
+            'Prior Period Baseline': priors,
+            'Target Benchmark': daily_target_val
+        })
+        
+        kpi_c1, kpi_c2, kpi_c3, kpi_c4 = control_col1.columns(4)
+        kpi_c1.metric("14-Day Units", f"{sum(actuals):,} units")
+        kpi_c2.metric("Prior 14-Day Baseline", f"{sum(priors):,} units", f"+{round(((sum(actuals)-sum(priors))/sum(priors))*100, 1)}%")
+        kpi_c3.metric("Peak Record Day", "560 units", "Oct 23 Rush")
+        kpi_c4.metric("14-Day Average Run", f"{int(sum(actuals)/14)} units/day", "Pacing Ahead")
+        
+        if HAS_PLOTLY:
+            fig = go.Figure()
+            fig.add_trace(go.Bar(x=past_14_df['Date'], y=past_14_df['Daily Units'], name="Daily Actual Sold Units", marker_color="#bb0012"))
+            fig.add_trace(go.Bar(x=past_14_df['Date'], y=past_14_df['Prior Period Baseline'], name="Prior Period Baseline", marker_color="#6366f1"))
+            fig.add_trace(go.Scatter(x=past_14_df['Date'], y=past_14_df['Target Benchmark'], name="Daily Store Target", mode='lines', line=dict(color="#d97706", width=2, dash='dash')))
+            fig.update_layout(
+                barmode='group',
+                margin=dict(l=10, r=10, t=25, b=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                yaxis=dict(rangemode='tozero', title="Units Sold", gridcolor="#f0efe9"),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                height=350
+            )
+            control_col1.plotly_chart(fig, use_container_width=True)
+        else:
+            control_col1.bar_chart(
+                past_14_df.set_index('Date')[['Daily Units', 'Prior Period Baseline']],
+                color=["#bb0012", "#6366f1"]
+            )
     
     st.markdown("---")
     
